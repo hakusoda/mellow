@@ -552,8 +552,8 @@ dependencies = [
 
 [[package]]
 name = "hyper-util"
-version = "0.0.0"
-source = "git+https://github.com/hyperium/hyper-util.git#e91fba80ac00464caea786be743274c4b7e958a0"
+version = "0.1.1"
+source = "git+https://github.com/hyperium/hyper-util.git#bca85f782007de1cc72a4b0365cdfa1ef28afd5e"
 dependencies = [
  "bytes",
  "futures-channel",
@@ -562,8 +562,6 @@ dependencies = [
  "http-body 1.0.0",
  "hyper 1.0.0",
  "pin-project-lite",
- "socket2 0.5.5",
- "tokio",
  "tower",
  "tower-service",
  "tracing",
