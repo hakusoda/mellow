@@ -4,12 +4,12 @@ use once_cell::sync::Lazy;
 
 use crate::interaction::{ Embed, InteractionResponseData };
 
-static APP_ID: Lazy<String> = Lazy::new(|| std::env::var("DISCORD_APP_ID").unwrap());
+static APP_ID: &'static str = std::env!("DISCORD_APP_ID");
 static CLIENT: Lazy<Client> = Lazy::new(||
 	Client::builder()
 		.default_headers({
 			let mut headers = header::HeaderMap::new();
-			headers.append("authorization", format!("Bot {}", std::env::var("DISCORD_TOKEN").unwrap()).parse().unwrap());
+			headers.append("authorization", format!("Bot {}", std::env!("DISCORD_TOKEN")).parse().unwrap());
 			headers
 		})
 		.build()

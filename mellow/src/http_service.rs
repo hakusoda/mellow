@@ -3,7 +3,6 @@ use hyper::{
 	body::Bytes,
 	Method, Request, Response, StatusCode
 };
-use once_cell::sync::Lazy;
 use http_body_util::{ combinators::BoxBody, Full, Empty, BodyExt };
 
 use crate::{
@@ -11,7 +10,7 @@ use crate::{
 	interaction::handle_request
 };
 
-static API_KEY: Lazy<String> = Lazy::new(|| std::env::var("API_KEY").unwrap());
+static API_KEY: &'static str = std::env!("API_KEY");
 
 pub async fn service(request: Request<hyper::body::Incoming>) -> Result<Response<BoxBody<Bytes, hyper::Error>>, Infallible> {
 	println!("{} {}", request.method(), request.uri());

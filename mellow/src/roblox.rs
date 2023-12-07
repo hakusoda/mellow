@@ -6,7 +6,7 @@ static CLIENT: Lazy<Client> = Lazy::new(||
 	Client::builder()
 		.default_headers({
 			let mut headers = header::HeaderMap::new();
-			headers.append("x-api-key", std::env::var("ROBLOX_OPEN_CLOUD_KEY").unwrap().parse().unwrap());
+			headers.append("x-api-key", std::env!("ROBLOX_OPEN_CLOUD_KEY").parse().unwrap());
 			headers
 		})
 		.build()

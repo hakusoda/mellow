@@ -4,9 +4,9 @@ use postgrest::Postgrest;
 use serde_repr::*;
 
 pub static DATABASE: Lazy<Postgrest> = Lazy::new(|| {
-	let key = std::env::var("SUPABASE_API_KEY").unwrap();
+	let key = std::env!("SUPABASE_API_KEY");
 	Postgrest::new("https://gzlrrsjtbzflasxukxki.supabase.co/rest/v1")
-		.insert_header("apikey", key.clone())
+		.insert_header("apikey", key)
 		.insert_header("authorization", format!("Bearer {}", key))
 });
 

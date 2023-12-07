@@ -174,7 +174,7 @@ pub async fn handle_request(request: Request<hyper::body::Incoming>) -> BoxBody<
 }
 
 fn parse_body(body: String, signature: &str, timestamp: &str) -> String {
-	let public_key = hex::decode(std::env::var("DISCORD_PUBLIC_KEY").unwrap())
+	let public_key = hex::decode(std::env!("DISCORD_PUBLIC_KEY"))
         .map(|vec| VerifyingKey::from_bytes(&vec.try_into().unwrap()).unwrap())
 		.unwrap();
 	public_key.verify(
