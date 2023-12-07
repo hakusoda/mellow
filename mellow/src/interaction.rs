@@ -179,7 +179,7 @@ fn parse_body(body: String, signature: &str, timestamp: &str) -> String {
 		.unwrap();
 	public_key.verify(
         format!("{}{}", timestamp, body).as_bytes(),
-        &hex::decode(&signature)
+        &hex::decode(signature)
             .map(|vec| Signature::from_bytes(&vec.try_into().unwrap()))
 			.unwrap()
     ).unwrap();

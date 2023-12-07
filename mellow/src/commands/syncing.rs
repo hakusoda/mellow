@@ -59,7 +59,7 @@ pub async fn sync_with_token(user: UserResponse, member: DiscordMember, guild_id
 pub async fn sync(interaction: InteractionPayload) -> SlashResponse {
 	let guild_id = interaction.guild_id.clone().unwrap();
 	let member = interaction.member.unwrap();
-	if let Some(user) = get_users_by_discord(vec![member.user.id.clone()], guild_id.clone()).await.into_iter().nth(0) {
+	if let Some(user) = get_users_by_discord(vec![member.user.id.clone()], guild_id.clone()).await.into_iter().next() {
 		tokio::spawn(async move {
 			sync_with_token(user, member, &guild_id, &interaction.token).await;
 		});

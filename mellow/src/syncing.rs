@@ -44,7 +44,7 @@ pub struct ConnectionMetadata {
 	pub roblox_memberships: Vec<RobloxMembership>
 }
 
-pub async fn get_connection_metadata(users: &Vec<UserResponse>, server: &Server) -> ConnectionMetadata {
+pub async fn get_connection_metadata(users: &[UserResponse], server: &Server) -> ConnectionMetadata {
 	let mut roblox_memberships: Vec<RobloxMembership> = vec![];
 	let mut group_ids: Vec<String> = vec![];
 	for action in server.actions.iter() {
@@ -95,7 +95,7 @@ pub async fn sync_member(user: Option<&User>, member: &DiscordMember, server: &S
 		let met = member_meets_action_requirements(user, action, &actions2, &connection_metadata, &mut requirement_cache, &mut used_connections).await;
 		match action.kind {
 			ProfileSyncActionKind::GiveRoles => {
-				let items: Vec<String> = action.metadata["items"].as_array().unwrap().into_iter().map(|x| x.as_str().unwrap().to_string()).collect();
+				let items: Vec<String> = action.metadata["items"].as_array().unwrap().iter().map(|x| x.as_str().unwrap().to_string()).collect();
 				if met {
 					if !items.iter().all(|x| member.roles.iter().any(|e| e == x)) {
 						let filtered: Vec<String> = items.into_iter().filter(|x| !member.roles.iter().any(|e| e == x)).collect();
@@ -235,7 +235,7 @@ pub async fn create_sign_up(user_id: String, guild_id: String, interaction_token
 pub async fn finish_sign_up(discord_id: String) {
 	if let Some(item) = SIGN_UPS.read().await.iter().find(|x| x.user_id == discord_id) {
 		if SystemTime::now().duration_since(item.created_at).unwrap().as_secs() < 891 {
-			if let Some(user) = get_users_by_discord(vec![discord_id.clone()], item.guild_id.clone()).await.into_iter().nth(0) {
+			if let Some(user) = get_users_by_discord(vec![discord_id.clone()], item.guild_id.clone()).await.into_iter().next() {
 				let member = get_member(&item.guild_id, &discord_id).await;
 				commands::syncing::sync_with_token(user, member, &item.guild_id, &item.interaction_token).await;
 			}

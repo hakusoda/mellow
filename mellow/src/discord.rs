@@ -17,7 +17,7 @@ static CLIENT: Lazy<Client> = Lazy::new(||
 );
 
 pub async fn edit_original_response(token: impl Into<String>, payload: InteractionResponseData) {
-	CLIENT.patch(format!("https://discord.com/api/v10/webhooks/{}/{}/messages/@original", APP_ID.to_string(), token.into()))
+	CLIENT.patch(format!("https://discord.com/api/v10/webhooks/{}/{}/messages/@original", APP_ID, token.into()))
 		.body(serde_json::to_string(&payload).unwrap())
 		.header("content-type", "application/json")
 		.send()
