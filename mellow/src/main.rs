@@ -5,6 +5,7 @@ use hyper::{
 };
 use tokio::net::TcpListener;
 use hyper_util::rt::TokioIo;
+use simple_logger::SimpleLogger;
 
 use interaction::InteractionPayload;
 
@@ -32,8 +33,12 @@ pub enum SlashResponse {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+	SimpleLogger::new().init().unwrap();
+
 	let address = SocketAddr::from(([127, 0, 0, 1], 8000));
 	let listener = TcpListener::bind(address).await?;
+	log::info!("now listening for http interactions!");
+
 	loop {
 		let (stream, _) = listener.accept().await?;
 
