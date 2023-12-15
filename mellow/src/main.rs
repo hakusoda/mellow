@@ -35,7 +35,7 @@ pub enum SlashResponse {
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 	SimpleLogger::new().init().unwrap();
 
-	let address = SocketAddr::from(([127, 0, 0, 1], 80));
+	let address = SocketAddr::from(([127, 0, 0, 1], 8080));
 	let listener = TcpListener::bind(address).await?;
 	log::info!("now listening for http interactions!");
 
