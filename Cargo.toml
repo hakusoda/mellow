@@ -1,3 +1,22 @@
 [workspace]
 members = ["mellow", "macros"]
 resolver = "2"
+
+[profile.dev]
+lto = false
+debug = true
+rpath = false
+panic = "unwind"
+opt-level = 0
+incremental = true
+codegen-units = 256
+overflow-checks = true
+debug-assertions = true
+
+[profile.release]
+lto = true
+strip = true
+panic = "unwind"
+opt-level = "s"
+codegen-units = 1
+debug-assertions = false
