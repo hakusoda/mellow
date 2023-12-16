@@ -14,7 +14,7 @@ pub async fn sync_with_token(user: UserResponse, member: DiscordMember, guild_id
 	let server = get_server(guild_id).await;
 	let metadata = get_connection_metadata(&vec![user.clone()], &server).await;
 
-	let result = sync_member(Some(&user.user), &member, &server, &metadata).await;
+	let result = sync_member(Some(&user.user), &member, &server, &metadata, &mut None).await;
 	edit_original_response(interaction_token, InteractionResponseData::ChannelMessageWithSource {
 		flags: None,
 		embeds: if result.role_changes.is_empty() { None } else { Some(vec![
@@ -86,8 +86,10 @@ pub async fn forcesyncall(interaction: InteractionPayload) -> SlashResponse {
 		let mut logs: Vec<Log> = vec![];
 		let mut total_synced = 0;
 		let mut total_changed = 0;
+
+		let mut guild_roles = None;
 		for member in members {
-			let result = sync_member(users.iter().find(|x| x.sub == member.user.id).map(|x| &x.user), &member, &server, &metadata).await;
+			let result = sync_member(users.iter().find(|x| x.sub == member.user.id).map(|x| &x.user), &member, &server, &metadata, &mut guild_roles).await;
 			if result.profile_changed {
 				time::sleep(time::Duration::from_secs(1)).await;
 				total_changed += 1;

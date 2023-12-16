@@ -130,17 +130,36 @@ pub async fn get_member(guild_id: impl Into<String>, user_id: impl Into<String>)
 }
 
 pub async fn get_members(guild_id: impl Into<String>) -> Vec<DiscordMember> {
-	let response = CLIENT.get(format!("https://discord.com/api/v10/guilds/{}/members?limit=100", guild_id.into()))
+	CLIENT.get(format!("https://discord.com/api/v10/guilds/{}/members?limit=100", guild_id.into()))
 		.send()
 		.await
-		.unwrap();
-	
-
-	response.json()
+		.unwrap()
+		.json()
 		.await
-		.unwrap()/*, Ratelimit {
-			wait_duration: response.headers().get("x-ratelimit-remaining").and_then(|x| if x.to_str().unwrap() == "0" {
-				response.headers().get("x-ratelimit-reset-after").map(|x| tokio::time::Duration::from_secs(x.to_str().unwrap().parse::<u64>().unwrap()))
-			} else { None })
-		})*/
+		.unwrap()
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct DiscordRole {
+	pub id: String,
+	pub name: String,
+	pub icon: Option<String>,
+	pub flags: u8,
+	pub color: u32,
+	pub hoist: bool,
+	pub managed: bool,
+	pub position: u8,
+	pub mentionable: bool,
+	pub permissions: String,
+	pub unicode_emoji: Option<String>
+}
+
+pub async fn get_guild_roles(guild_id: impl Into<String>) -> Vec<DiscordRole> {
+	CLIENT.get(format!("https://discord.com/api/v10/guilds/{}/roles", guild_id.into()))
+		.send()
+		.await
+		.unwrap()
+		.json()
+		.await
+		.unwrap()
 }

@@ -6,7 +6,7 @@ use async_recursion::async_recursion;
 
 use crate::{
 	roblox::get_user_group_roles,
-	discord::{ DiscordMember, DiscordModifyMemberPayload, get_member, modify_member },
+	discord::{ DiscordRole, DiscordMember, DiscordModifyMemberPayload, get_member, modify_member, get_guild_roles },
 	commands,
 	database::{ User, Server, UserResponse, UserConnection, ProfileSyncAction, UserConnectionKind, ProfileSyncActionKind, ProfileSyncActionRequirementKind, ProfileSyncActionRequirementsKind, get_users_by_discord }
 };
@@ -84,7 +84,17 @@ pub async fn get_connection_metadata(users: &[UserResponse], server: &Server) ->
 	}
 }
 
-pub async fn sync_member(user: Option<&User>, member: &DiscordMember, server: &Server, connection_metadata: &ConnectionMetadata) -> SyncMemberResult {
+async fn get_role_name(id: String, guild_id: impl Into<String>, roles: &mut Option<Vec<DiscordRole>>) -> String {
+	if roles.is_none() {
+		*roles = Some(get_guild_roles(guild_id).await);
+	}
+	if let Some(items) = roles {
+		return items.iter().find(|x| x.id == id).map_or("unknown role".into(), |x| x.name.clone());
+	}
+	unreachable!()
+}
+
+pub async fn sync_member(user: Option<&User>, member: &DiscordMember, server: &Server, connection_metadata: &ConnectionMetadata, guild_roles: &mut Option<Vec<DiscordRole>>) -> SyncMemberResult {
 	let mut roles = member.roles.clone();
 	let mut role_changes: Vec<RoleChange> = vec![];
 	let mut requirement_cache: HashMap<String, bool> = HashMap::new();
@@ -103,8 +113,8 @@ pub async fn sync_member(user: Option<&User>, member: &DiscordMember, server: &S
 							roles.push(item.clone());
 							role_changes.push(RoleChange {
 								kind: RoleChangeKind::Added,
-								target_id: item,
-								display_name: "placeholder name".into()
+								target_id: item.clone(),
+								display_name: get_role_name(item, &server.id, guild_roles).await
 							});
 						}
 					}
@@ -116,7 +126,7 @@ pub async fn sync_member(user: Option<&User>, member: &DiscordMember, server: &S
 							role_changes.push(RoleChange {
 								kind: RoleChangeKind::Removed,
 								target_id: item.clone(),
-								display_name: "placeholder name".into()
+								display_name: get_role_name(item.clone(), &server.id, guild_roles).await
 							});
 						}
 						roles = filtered;
@@ -152,9 +162,7 @@ pub async fn member_meets_action_requirements(
 ) -> bool {
 	let mut total_met = 0;
 	let requires_one = matches!(action.requirements_type, ProfileSyncActionRequirementsKind::MeetOne);
-	println!("{} {}", action.name, action.requirements.len());
 	for item in action.requirements.iter() {
-		println!("{:?}", item.kind);
 		if cache.get(&item.id).is_some_and(|x| *x) || match item.kind {
 			ProfileSyncActionRequirementKind::RobloxHaveConnection |
 			ProfileSyncActionRequirementKind::RobloxInGroup |
@@ -193,7 +201,6 @@ pub async fn member_meets_action_requirements(
 		} {
 			cache.insert(item.id.clone(), true);
 			if requires_one {
-				println!("returning early");
 				return true;
 			}
 			total_met += 1;
