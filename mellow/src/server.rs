@@ -16,6 +16,7 @@ pub struct Log {
 #[derive(Clone, Debug)]
 #[repr(u8)]
 pub enum LogKind {
+	#[allow(dead_code)]
 	AuditLog = 1 << 0,
 	ServerProfileSync = 1 << 1
 }

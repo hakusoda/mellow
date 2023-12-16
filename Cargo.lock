@@ -917,6 +917,7 @@ version = "0.1.1"
 dependencies = [
  "actix-web",
  "async-recursion",
+ "derive_more",
  "ed25519-dalek",
  "hex",
  "log",

@@ -4,17 +4,14 @@ use mellow_macros::command;
 use crate::{
 	server::{ Log, LogKind, send_logs },
 	discord::{ DiscordMember, get_members, edit_original_response },
-	syncing::{ RoleChangeKind, sync_member, create_sign_up, get_connection_metadata },
+	syncing::{ RoleChangeKind, SyncMemberResult, sync_member, create_sign_up, get_connection_metadata, sync_single_user },
 	database::{ UserResponse, get_server, get_users_by_discord },
 	interaction::{ Embed, EmbedField, InteractionPayload, InteractionResponseData },
 	SlashResponse
 };
 
-pub async fn sync_with_token(user: UserResponse, member: DiscordMember, guild_id: &String, interaction_token: &String) {
-	let server = get_server(guild_id).await;
-	let metadata = get_connection_metadata(&vec![user.clone()], &server).await;
-
-	let result = sync_member(Some(&user.user), &member, &server, &metadata, &mut None).await;
+pub async fn sync_with_token(user: UserResponse, member: DiscordMember, guild_id: &String, interaction_token: &String) -> SyncMemberResult {
+	let result = sync_single_user(&user, &member, guild_id).await;
 	let mut fields = vec![];
 	if let Some(changes) = &result.nickname_change {
 		fields.push(EmbedField {
@@ -51,13 +48,13 @@ pub async fn sync_with_token(user: UserResponse, member: DiscordMember, guild_id
 			)
 		} else {
 			"## Server Profile is up-to-date.\nYour server profile is already up-to-date, no adjustments have been made.\n\nIf you were expecting a different result, you may need to wait a few minutes.".into()
-		}, if server.actions.iter().all(|x| x.requirements.iter().all(|e| e.relevant_connection().map_or(true, |x| user.user.connections.iter().any(|e| x == e.connection.kind)))) { "".to_string() } else {
+		}, if result.server.actions.iter().all(|x| x.requirements.iter().all(|e| e.relevant_connection().map_or(true, |x| user.user.connections.iter().any(|e| x == e.connection.kind)))) { "".to_string() } else {
 			format!("\n\n### You're missing connections\nYou haven't given this server access to all connections yet, change that [here](https://hakumi.cafe/mellow/server/{guild_id}/onboarding)!")
 		}))
 	}).await;
 
 	if result.profile_changed {
-		send_logs(&server, vec![Log {
+		send_logs(&result.server, vec![Log {
 			kind: LogKind::ServerProfileSync,
 			data: serde_json::json!({
 				"member": member,
@@ -67,6 +64,8 @@ pub async fn sync_with_token(user: UserResponse, member: DiscordMember, guild_id
 			})
 		}]).await;
 	}
+
+	result
 }
 
 #[command]

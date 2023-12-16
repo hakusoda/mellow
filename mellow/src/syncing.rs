@@ -6,13 +6,14 @@ use async_recursion::async_recursion;
 
 use crate::{
 	roblox::get_user_group_roles,
-	discord::{ DiscordRole, DiscordMember, DiscordModifyMemberPayload, get_member, modify_member, get_guild_roles },
-	commands,
-	database::{ User, Server, UserResponse, UserConnection, ProfileSyncAction, UserConnectionKind, ProfileSyncActionKind, ProfileSyncActionRequirementKind, ProfileSyncActionRequirementsKind, get_users_by_discord }
+	discord::{ DiscordRole, DiscordMember, DiscordModifyMemberPayload, modify_member, get_guild_roles },
+	database::{ User, Server, UserResponse, UserConnection, ProfileSyncAction, UserConnectionKind, ProfileSyncActionKind, ProfileSyncActionRequirementKind, ProfileSyncActionRequirementsKind, get_server }
 };
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct SyncMemberResult {
+	#[serde(skip)]
+	pub server: Server,
 	pub role_changes: Vec<RoleChange>,
 	pub profile_changed: bool,
 	pub nickname_change: Option<NicknameChange>,
@@ -98,6 +99,13 @@ async fn get_role_name(id: String, guild_id: impl Into<String>, roles: &mut Opti
 	unreachable!()
 }
 
+pub async fn sync_single_user(user: &UserResponse, member: &DiscordMember, guild_id: impl Into<String>) -> SyncMemberResult {
+	let server = get_server(guild_id).await;
+	let metadata = get_connection_metadata(&vec![user.clone()], &server).await;
+
+	sync_member(Some(&user.user), &member, &server, &metadata, &mut None).await
+}
+
 pub async fn sync_member(user: Option<&User>, member: &DiscordMember, server: &Server, connection_metadata: &ConnectionMetadata, guild_roles: &mut Option<Vec<DiscordRole>>) -> SyncMemberResult {
 	let mut roles = member.roles.clone();
 	let mut role_changes: Vec<RoleChange> = vec![];
@@ -167,6 +175,7 @@ pub async fn sync_member(user: Option<&User>, member: &DiscordMember, server: &S
 	}
 
 	SyncMemberResult {
+		server: server.clone(),
 		role_changes,
 		profile_changed,
 		nickname_change,
@@ -234,14 +243,14 @@ pub async fn member_meets_action_requirements(
 	total_met == action.requirements.len()
 }
 
-struct SignUp {
+pub struct SignUp {
 	pub user_id: String,
 	pub guild_id: String,
 	pub created_at: SystemTime,
 	pub interaction_token: String
 }
 
-static SIGN_UPS: RwLock<Vec<SignUp>> = RwLock::const_new(vec![]);
+pub static SIGN_UPS: RwLock<Vec<SignUp>> = RwLock::const_new(vec![]);
 
 pub async fn create_sign_up(user_id: String, guild_id: String, interaction_token: String) {
 	let mut items = SIGN_UPS.write().await;
@@ -257,14 +266,4 @@ pub async fn create_sign_up(user_id: String, guild_id: String, interaction_token
 			interaction_token
 		});
 	}
-}
-
-pub async fn finish_sign_up(discord_id: String) {
-	if let Some(item) = SIGN_UPS.read().await.iter().find(|x| x.user_id == discord_id) {
-		if let Some(user) = get_users_by_discord(vec![discord_id.clone()], item.guild_id.clone()).await.into_iter().next() {
-				let member = get_member(&item.guild_id, &discord_id).await;
-			commands::syncing::sync_with_token(user, member, &item.guild_id, &item.interaction_token).await;
-		}
-	}
-	SIGN_UPS.write().await.retain(|x| x.user_id != discord_id);
 }

@@ -66,7 +66,7 @@ pub async fn get_users_by_discord(ids: Vec<String>, server_id: String) -> Vec<Us
 	).unwrap()
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Server {
 	pub id: String,
 	pub actions: Vec<ProfileSyncAction>,
@@ -76,7 +76,7 @@ pub struct Server {
 	pub allow_forced_syncing: bool
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ProfileSyncAction {
 	pub id: String,
 	pub name: String,
@@ -87,7 +87,7 @@ pub struct ProfileSyncAction {
 	pub requirements_type: ProfileSyncActionRequirementsKind
 }
 
-#[derive(Deserialize, Debug, Clone, Eq, Hash, PartialEq)]
+#[derive(Deserialize, Debug, Clone, Eq, Hash, PartialEq, Serialize)]
 pub struct ProfileSyncActionRequirement {
 	pub id: String,
 	#[serde(rename = "type")]
@@ -112,7 +112,7 @@ impl ProfileSyncActionRequirement {
 	}
 }
 
-#[derive(Deserialize_repr, Debug, Clone)]
+#[derive(Clone, Debug, Deserialize_repr, Serialize_repr)]
 #[repr(u8)]
 pub enum ProfileSyncActionKind {
 	GiveRoles,
@@ -121,7 +121,7 @@ pub enum ProfileSyncActionKind {
 	CancelSync
 }
 
-#[derive(Deserialize_repr, Debug, Clone, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Deserialize_repr, Serialize_repr)]
 #[repr(u8)]
 pub enum ProfileSyncActionRequirementKind {
 	RobloxHaveConnection,
@@ -138,7 +138,7 @@ pub enum ProfileSyncActionRequirementKind {
 	GitHubInOrganisation
 }
 
-#[derive(Deserialize_repr, Debug, Clone)]
+#[derive(Clone, Debug, Deserialize_repr, Serialize_repr)]
 #[repr(u8)]
 pub enum ProfileSyncActionRequirementsKind {
 	MeetAll,
