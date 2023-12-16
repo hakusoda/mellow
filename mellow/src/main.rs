@@ -33,7 +33,11 @@ pub enum SlashResponse {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-	SimpleLogger::new().init().unwrap();
+	SimpleLogger::new()
+		.with_level(log::LevelFilter::Info)
+		.env()
+		.init()
+		.unwrap();
 
 	let address = SocketAddr::from(([127, 0, 0, 1], 8080));
 	let listener = TcpListener::bind(address).await?;
