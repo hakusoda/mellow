@@ -8,7 +8,7 @@ use crate::{
 	roblox::get_user_group_roles,
 	discord::{ DiscordMember, DiscordModifyMemberPayload, get_member, modify_member },
 	commands,
-	database::{ User, Server, UserResponse, UserConnection, ProfileSyncAction, UserConnectionKind, ProfileSyncActionKind, ProfileSyncActionRequirement, ProfileSyncActionRequirementKind, ProfileSyncActionRequirementsKind, get_users_by_discord }
+	database::{ User, Server, UserResponse, UserConnection, ProfileSyncAction, UserConnectionKind, ProfileSyncActionKind, ProfileSyncActionRequirementKind, ProfileSyncActionRequirementsKind, get_users_by_discord }
 };
 
 #[derive(Debug)]
@@ -87,7 +87,7 @@ pub async fn get_connection_metadata(users: &[UserResponse], server: &Server) ->
 pub async fn sync_member(user: Option<&User>, member: &DiscordMember, server: &Server, connection_metadata: &ConnectionMetadata) -> SyncMemberResult {
 	let mut roles = member.roles.clone();
 	let mut role_changes: Vec<RoleChange> = vec![];
-	let mut requirement_cache: HashMap<ProfileSyncActionRequirement, bool> = HashMap::new();
+	let mut requirement_cache: HashMap<String, bool> = HashMap::new();
 	let mut used_connections: Vec<UserConnection> = vec![];
 	
 	let actions2 = server.actions.clone();
@@ -147,61 +147,58 @@ pub async fn member_meets_action_requirements(
 	action: &ProfileSyncAction,
 	all_actions: &Vec<ProfileSyncAction>,
 	connection_metadata: &ConnectionMetadata,
-	cache: &mut HashMap<ProfileSyncActionRequirement, bool>,
+	cache: &mut HashMap<String, bool>,
 	used_connections: &mut Vec<UserConnection>
 ) -> bool {
 	let mut total_met = 0;
 	let requires_one = matches!(action.requirements_type, ProfileSyncActionRequirementsKind::MeetOne);
+	println!("{} {}", action.name, action.requirements.len());
 	for item in action.requirements.iter() {
-		if if let Some(cached) = cache.get(item) {
-			*cached
-		} else {
-			match item.kind {
-				ProfileSyncActionRequirementKind::RobloxHaveConnection |
-				ProfileSyncActionRequirementKind::RobloxInGroup |
-				ProfileSyncActionRequirementKind::RobloxHaveGroupRole |
-				ProfileSyncActionRequirementKind::RobloxHaveGroupRankInRange => {
-					let connection = user.and_then(|x| x.connections.iter().find(|x| matches!(x.connection.kind, UserConnectionKind::Roblox)));
-					if let Some(connection) = connection.cloned() {
-						if !used_connections.contains(&connection.connection) {
-							used_connections.push(connection.connection);
-						}
+		println!("{:?}", item.kind);
+		if cache.get(&item.id).is_some_and(|x| *x) || match item.kind {
+			ProfileSyncActionRequirementKind::RobloxHaveConnection |
+			ProfileSyncActionRequirementKind::RobloxInGroup |
+			ProfileSyncActionRequirementKind::RobloxHaveGroupRole |
+			ProfileSyncActionRequirementKind::RobloxHaveGroupRankInRange => {
+				let connection = user.and_then(|x| x.connections.iter().find(|x| matches!(x.connection.kind, UserConnectionKind::Roblox)));
+				if let Some(connection) = connection.cloned() {
+					if !used_connections.contains(&connection.connection) {
+						used_connections.push(connection.connection);
 					}
+				}
 
-					return match item.kind {
-						ProfileSyncActionRequirementKind::RobloxHaveConnection =>
-							connection.is_some(),
-						ProfileSyncActionRequirementKind::RobloxInGroup =>
-							connection.map_or(false, |x| connection_metadata.roblox_memberships.iter().any(|e| e.user_id == x.connection.sub && e.group_id.to_string() == item.data[0])),
-						ProfileSyncActionRequirementKind::RobloxHaveGroupRole =>
-							connection.map_or(false, |x| connection_metadata.roblox_memberships.iter().any(|e| e.user_id == x.connection.sub && e.role.to_string() == item.data[1])),
-						ProfileSyncActionRequirementKind::RobloxHaveGroupRankInRange => {
-							let id = &item.data[0];
-							let min: u8 = item.data[1].parse().unwrap();
-							let max: u8 = item.data[2].parse().unwrap();
-							connection.map_or(false, |x| connection_metadata.roblox_memberships.iter().any(|e| e.user_id == x.connection.sub && e.group_id.to_string() == *id && e.rank >= min && e.rank <= max))
-						},
-						_ => false
-					};
-				},
-				ProfileSyncActionRequirementKind::MeetOtherAction => {
-					for action2 in all_actions.iter() {
-						if action2.id == item.data[0] {
-							return member_meets_action_requirements(user, action2, &all_actions, &connection_metadata, cache, used_connections).await;
-						}
-					}
-					false
-				},
-				_ => false
-			}
+				match item.kind {
+					ProfileSyncActionRequirementKind::RobloxHaveConnection =>
+						connection.is_some(),
+					ProfileSyncActionRequirementKind::RobloxInGroup =>
+						connection.map_or(false, |x| connection_metadata.roblox_memberships.iter().any(|e| e.user_id == x.connection.sub && e.group_id.to_string() == item.data[0])),
+					ProfileSyncActionRequirementKind::RobloxHaveGroupRole =>
+						connection.map_or(false, |x| connection_metadata.roblox_memberships.iter().any(|e| e.user_id == x.connection.sub && e.role.to_string() == item.data[1])),
+					ProfileSyncActionRequirementKind::RobloxHaveGroupRankInRange => {
+						let id = &item.data[0];
+						let min: u8 = item.data[1].parse().unwrap();
+						let max: u8 = item.data[2].parse().unwrap();
+						connection.map_or(false, |x| connection_metadata.roblox_memberships.iter().any(|e| e.user_id == x.connection.sub && e.group_id.to_string() == *id && e.rank >= min && e.rank <= max))
+					},
+					_ => false
+				}
+			},
+			ProfileSyncActionRequirementKind::MeetOtherAction => {
+				let target_id = &item.data[0];
+				if let Some(action2) = all_actions.iter().find(|x| x.id == *target_id) {
+					member_meets_action_requirements(user, action2, &all_actions, &connection_metadata, cache, used_connections).await
+				} else { false }
+			},
+			_ => false
 		} {
-			cache.insert(item.clone(), true);
-			total_met += 1;
+			cache.insert(item.id.clone(), true);
 			if requires_one {
+				println!("returning early");
 				return true;
 			}
+			total_met += 1;
 		} else {
-			cache.insert(item.clone(), false);
+			cache.insert(item.id.clone(), false);
 		}
 	}
 	total_met == action.requirements.len()
