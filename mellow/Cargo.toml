@@ -1,9 +1,16 @@
 [package]
 name = "mellow"
-version = "0.1.0"
-edition = "2021"
+authors = ["katsumi143 <32640219+katsumi143@users.noreply.github.com>"]
+version = "0.1.1"
+description = "now here's the syncer"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+readme = "../README.md"
+license = "GPL-3.0-only"
+homepage = "https://github.com/hakusoda/mellow"
+repository = "https://github.com/hakusoda/mellow"
+
+edition = "2021"
+rust-version = "1.73"
 
 [dependencies]
 hex = "0.4.3"
