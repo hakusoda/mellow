@@ -1,13 +1,9 @@
-use hyper::{ body::Bytes, Request };
 use serde::{ Serialize, Deserialize };
 use serde_repr::*;
-use ed25519_dalek::{ Verifier, Signature, VerifyingKey };
-use http_body_util::{ combinators::BoxBody, BodyExt };
 
 use crate::{
 	discord::DiscordMember,
 	commands::COMMANDS,
-	http_service::{ json, empty },
 	SlashResponse
 };
 
@@ -121,46 +117,36 @@ struct InteractionResponse {
 	data: Option<InteractionResponseData>
 }
 
-pub async fn handle_request(request: Request<hyper::body::Incoming>) -> BoxBody<Bytes, hyper::Error> {
-	let headers = request.headers().clone();
-	let body = parse_body(
-		String::from_utf8(request.collect().await.unwrap().to_bytes().to_vec()).unwrap(),
-		headers["x-signature-ed25519"].to_str().unwrap(),
-		headers["x-signature-timestamp"].to_str().unwrap()
-	);
+pub async fn handle_request(body: String) -> impl actix_web::Responder {
 	let payload: InteractionPayload = serde_json::from_str(&body).unwrap();
 	match payload.kind {
-		InteractionKind::Ping => json(InteractionResponse {
-			kind: InteractionResponseKind::Pong,
-			data: None
-		}),
 		InteractionKind::ApplicationCommand => {
 			if let Some(ref data) = payload.data {
 				if let Some(command) = COMMANDS.iter().find(|x| x.name == data.name) {
 					println!("executing {}", command.name);
 					if let Some(callback) = command.slash_action {
-						match callback(payload).await {
-							SlashResponse::Message { flags, content } => {
-								return json(InteractionResponse {
+						return match callback(payload).await {
+							SlashResponse::Message { flags, content } =>
+								actix_web::web::Json(InteractionResponse {
 									kind: InteractionResponseKind::ChannelMessageWithSource,
 									data: Some(InteractionResponseData::ChannelMessageWithSource {
 										flags,
 										embeds: None,
 										content
 									})
-								});
-							},
-							SlashResponse::DeferMessage => return json(InteractionResponse {
-								kind: InteractionResponseKind::DeferredChannelMessageWithSource,
-								data: Some(InteractionResponseData::DeferredChannelMessageWithSource {
-									flags: 64
+								}),
+							SlashResponse::DeferMessage =>
+								actix_web::web::Json(InteractionResponse {
+									kind: InteractionResponseKind::DeferredChannelMessageWithSource,
+									data: Some(InteractionResponseData::DeferredChannelMessageWithSource {
+										flags: 64
+									})
 								})
-							})
-						}
+						};
 					}
 				}
 			}
-			json(InteractionResponse {
+			actix_web::web::Json(InteractionResponse {
 				kind: InteractionResponseKind::ChannelMessageWithSource,
 				data: Some(InteractionResponseData::ChannelMessageWithSource {
 					flags: None,
@@ -169,19 +155,9 @@ pub async fn handle_request(request: Request<hyper::body::Incoming>) -> BoxBody<
 				})
 			})
 		},
-		_ => empty()
+		_ => actix_web::web::Json(InteractionResponse {
+			kind: InteractionResponseKind::Pong,
+			data: None
+		})
 	}
-}
-
-fn parse_body(body: String, signature: &str, timestamp: &str) -> String {
-	let public_key = hex::decode(std::env!("DISCORD_PUBLIC_KEY"))
-        .map(|vec| VerifyingKey::from_bytes(&vec.try_into().unwrap()).unwrap())
-		.unwrap();
-	public_key.verify(
-        format!("{}{}", timestamp, body).as_bytes(),
-        &hex::decode(signature)
-            .map(|vec| Signature::from_bytes(&vec.try_into().unwrap()))
-			.unwrap()
-    ).unwrap();
-	body
 }

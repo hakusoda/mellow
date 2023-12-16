@@ -1,14 +1,8 @@
-use std::net::SocketAddr;
-use hyper::{
-	server::conn::http1,
-	service::service_fn
-};
-use tokio::net::TcpListener;
-use hyper_util::rt::TokioIo;
 use simple_logger::SimpleLogger;
 
 use interaction::InteractionPayload;
 
+mod http;
 mod roblox;
 mod server;
 mod discord;
@@ -16,7 +10,6 @@ mod syncing;
 mod commands;
 mod database;
 mod interaction;
-mod http_service;
 
 pub struct Command {
 	name: &'static str,
@@ -31,31 +24,15 @@ pub enum SlashResponse {
 	DeferMessage
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
 	SimpleLogger::new()
 		.with_level(log::LevelFilter::Info)
 		.env()
 		.init()
 		.unwrap();
 
-	let address = SocketAddr::from(([127, 0, 0, 1], 8080));
-	let listener = TcpListener::bind(address).await?;
-	log::info!("now listening for http interactions!");
-
-	loop {
-		let (stream, _) = listener.accept().await?;
-
-		let io = TokioIo::new(stream);
-		tokio::task::spawn(async move {
-			if let Err(err) = http1::Builder::new()
-				.serve_connection(io, service_fn(http_service::service))
-				.await
-			{
-				println!("Error serving connection: {:?}", err);
-			}
-		});
-	}
+	http::start().await
 }
 
 pub type BoxFuture<'a, T> = std::pin::Pin<Box<dyn std::future::Future<Output = T> + Send + 'a>>;

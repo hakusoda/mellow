@@ -261,11 +261,9 @@ pub async fn create_sign_up(user_id: String, guild_id: String, interaction_token
 
 pub async fn finish_sign_up(discord_id: String) {
 	if let Some(item) = SIGN_UPS.read().await.iter().find(|x| x.user_id == discord_id) {
-		if SystemTime::now().duration_since(item.created_at).unwrap().as_secs() < 891 {
-			if let Some(user) = get_users_by_discord(vec![discord_id.clone()], item.guild_id.clone()).await.into_iter().next() {
+		if let Some(user) = get_users_by_discord(vec![discord_id.clone()], item.guild_id.clone()).await.into_iter().next() {
 				let member = get_member(&item.guild_id, &discord_id).await;
-				commands::syncing::sync_with_token(user, member, &item.guild_id, &item.interaction_token).await;
-			}
+			commands::syncing::sync_with_token(user, member, &item.guild_id, &item.interaction_token).await;
 		}
 	}
 	SIGN_UPS.write().await.retain(|x| x.user_id != discord_id);
