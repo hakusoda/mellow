@@ -2,7 +2,7 @@ use serde::{ Serialize, Deserialize };
 
 use crate::{
 	discord::{ DiscordMember, ChannelMessage, create_channel_message },
-	syncing::{ RoleChange, RoleChangeKind },
+	syncing::{ RoleChange, NicknameChange, RoleChangeKind },
 	database::{ Server, UserConnection },
 	interaction::{ Embed, EmbedField, EmbedAuthor }
 };
@@ -24,6 +24,7 @@ pub enum LogKind {
 struct ServerProfileSyncLog {
 	member: DiscordMember,
 	role_changes: Vec<RoleChange>,
+	nickname_change: Option<NicknameChange>,
 	relevant_connections: Vec<UserConnection>
 }
 
@@ -46,6 +47,16 @@ pub async fn send_logs(server: &Server, logs: Vec<Log>) {
 									RoleChangeKind::Added => format!("+ {}", x.display_name),
 									RoleChangeKind::Removed => format!("- {}", x.display_name)
 								}).collect::<Vec<String>>().join("\n")),
+								inline: None
+							});
+						}
+						if let Some(changes) = data.nickname_change {
+							fields.push(EmbedField {
+								name: "Nickname changes".into(),
+								value: format!("```diff{}{}```",
+									changes.0.map(|x| format!("\n- {x}")).unwrap_or("".into()),
+									changes.1.map(|x| format!("\n+ {x}")).unwrap_or("".into())
+								),
 								inline: None
 							});
 						}

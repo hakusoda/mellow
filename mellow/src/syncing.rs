@@ -15,6 +15,7 @@ use crate::{
 pub struct SyncMemberResult {
 	pub role_changes: Vec<RoleChange>,
 	pub profile_changed: bool,
+	pub nickname_change: Option<NicknameChange>,
 	pub relevant_connections: Vec<UserConnection>
 }
 
@@ -30,6 +31,9 @@ pub enum RoleChangeKind {
 	Added,
 	Removed
 }
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct NicknameChange(pub Option<String>, pub Option<String>);
 
 #[derive(Debug)]
 pub struct RobloxMembership {
@@ -136,9 +140,27 @@ pub async fn sync_member(user: Option<&User>, member: &DiscordMember, server: &S
 			_ => {}
 		};
 	}
-	let profile_changed = !role_changes.is_empty();
+
+	let target_nickname = match &server.default_nickname {
+		Some(t) => match t.as_str() {
+			"{roblox_username}" =>
+				user.and_then(|x| x.connections.iter().find(|x| matches!(x.connection.kind, UserConnectionKind::Roblox)).and_then(|x| x.connection.username.clone())),
+			"{roblox_display_name}" =>
+				user.and_then(|x| x.connections.iter().find(|x| matches!(x.connection.kind, UserConnectionKind::Roblox)).and_then(|x| x.connection.display_name.clone())),
+			_ => None
+		},
+		None => None
+	};
+	let nickname_change = if let Some(target) = &target_nickname {
+		if member.nick.is_none() || member.nick.clone().is_some_and(|x| x != *target) {
+			Some(NicknameChange(member.nick.clone(), Some(target.clone())))
+		} else { None }
+	} else { None };
+	
+	let profile_changed = !role_changes.is_empty() || nickname_change.is_some();
 	if profile_changed {
 		modify_member(server.id.clone(), member.user.id.clone(), DiscordModifyMemberPayload {
+			nick: target_nickname,
 			roles: Some(roles),
 			..Default::default()
 		}).await;
@@ -147,6 +169,7 @@ pub async fn sync_member(user: Option<&User>, member: &DiscordMember, server: &S
 	SyncMemberResult {
 		role_changes,
 		profile_changed,
+		nickname_change,
 		relevant_connections: used_connections
 	}
 }

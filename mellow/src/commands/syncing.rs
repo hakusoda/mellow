@@ -15,23 +15,36 @@ pub async fn sync_with_token(user: UserResponse, member: DiscordMember, guild_id
 	let metadata = get_connection_metadata(&vec![user.clone()], &server).await;
 
 	let result = sync_member(Some(&user.user), &member, &server, &metadata, &mut None).await;
+	let mut fields = vec![];
+	if let Some(changes) = &result.nickname_change {
+		fields.push(EmbedField {
+			name: "Nickname changes".into(),
+			value: format!("```diff{}{}```",
+				changes.0.as_ref().map(|x| format!("\n- {x}")).unwrap_or("".into()),
+				changes.1.as_ref().map(|x| format!("\n+ {x}")).unwrap_or("".into())
+			),
+			inline: None
+		});
+	}
+	if !result.role_changes.is_empty() {
+		fields.push(EmbedField {
+			name: "Role changes".into(),
+			value: format!("```diff\n{}```", result.role_changes.iter().map(|x| match x.kind {
+				RoleChangeKind::Added => format!("+ {}", x.display_name),
+				RoleChangeKind::Removed => format!("- {}", x.display_name)
+			}).collect::<Vec<String>>().join("\n")),
+			inline: None
+		});
+	}
+
 	edit_original_response(interaction_token, InteractionResponseData::ChannelMessageWithSource {
 		flags: None,
-		embeds: if result.role_changes.is_empty() { None } else { Some(vec![
+		embeds: if !fields.is_empty() { Some(vec![
 			Embed {
-				fields: Some(vec![
-					EmbedField {
-						name: "Role Changes".into(),
-						value: format!("```diff\n{}```", result.role_changes.iter().map(|x| match x.kind {
-							RoleChangeKind::Added => format!("+ {}", x.display_name),
-							RoleChangeKind::Removed => format!("- {}", x.display_name)
-						}).collect::<Vec<String>>().join("\n")),
-						inline: None
-					}
-				]),
+				fields: Some(fields),
 				..Default::default()
 			}
-		]) },
+		]) } else { None },
 		content: Some(format!("{}{}", if result.profile_changed {
 			format!("## Server Profile has been updated.\n{}",
 				if result.role_changes.is_empty() { "" } else { "Your roles have been updated." }
@@ -49,6 +62,7 @@ pub async fn sync_with_token(user: UserResponse, member: DiscordMember, guild_id
 			data: serde_json::json!({
 				"member": member,
 				"role_changes": result.role_changes,
+				"nickname_change": result.nickname_change,
 				"relevant_connections": result.relevant_connections
 			})
 		}]).await;
