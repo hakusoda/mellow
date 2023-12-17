@@ -44,6 +44,8 @@ async fn interactions(request: HttpRequest, body: String) -> ApiResult<interacti
 	let timestamp = headers.get("x-signature-timestamp")
 		.and_then(|x| x.to_str().ok())
 		.ok_or_else(|| ApiError::GenericInvalidRequest)?;
+
+	// here we verify that the request originated from Discord with cryptography
 	if let Err(_) = verify_interaction_body(&body, signature, timestamp) {
 		return Err(ApiError::InvalidSignature);
 	}

@@ -1,4 +1,5 @@
 use serde::{ Serialize, Deserialize };
+use actix_web::web::Json;
 use serde_repr::*;
 
 use crate::{
@@ -121,16 +122,15 @@ pub struct InteractionResponse {
 pub async fn handle_request(body: String) -> ApiResult<InteractionResponse> {
 	let payload: InteractionPayload = serde_json::from_str(&body).unwrap();
 	match payload.kind {
-		InteractionKind::Ping => Ok(actix_web::web::Json(InteractionResponse {
+		InteractionKind::Ping => Ok(Json(InteractionResponse {
 			kind: InteractionResponseKind::Pong,
 			data: None
 		})),
 		InteractionKind::ApplicationCommand => {
 			if let Some(ref data) = payload.data {
 				if let Some(command) = COMMANDS.iter().find(|x| x.name == data.name) {
-					println!("executing {}", command.name);
 					if let Some(callback) = command.slash_action {
-						return Ok(actix_web::web::Json(match callback(payload).await {
+						return Ok(Json(match callback(payload).await {
 							SlashResponse::Message { flags, content } =>
 								InteractionResponse {
 									kind: InteractionResponseKind::ChannelMessageWithSource,
@@ -151,7 +151,7 @@ pub async fn handle_request(body: String) -> ApiResult<InteractionResponse> {
 					}
 				}
 			}
-			Ok(actix_web::web::Json(InteractionResponse {
+			Ok(Json(InteractionResponse {
 				kind: InteractionResponseKind::ChannelMessageWithSource,
 				data: Some(InteractionResponseData::ChannelMessageWithSource {
 					flags: None,

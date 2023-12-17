@@ -104,6 +104,7 @@ pub async fn forcesyncall(interaction: InteractionPayload) -> SlashResponse {
 		for member in members {
 			let result = sync_member(users.iter().find(|x| x.sub == member.user.id).map(|x| &x.user), &member, &server, &metadata, &mut guild_roles).await;
 			if result.profile_changed {
+				// sleep for one second to avoid hitting Discord ratelimit
 				time::sleep(time::Duration::from_secs(1)).await;
 				total_changed += 1;
 

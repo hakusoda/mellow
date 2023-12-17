@@ -36,7 +36,7 @@ pub async fn send_logs(server: &Server, logs: Vec<Log>) {
 			if (server.logging_types & log.kind.clone() as u8) == log.kind.clone() as u8 {
 				match log.kind {
 					LogKind::AuditLog => {
-
+						unimplemented!()
 					},
 					LogKind::ServerProfileSync => {
 						let data: ServerProfileSyncLog = serde_json::from_value(log.data).unwrap();
