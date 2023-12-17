@@ -1,6 +1,7 @@
 use actix_web::{
 	web,
 	http::{ StatusCode, header::ContentType },
+	middleware::Logger,
 	App, HttpServer, HttpResponse
 };
 use derive_more::{ Error, Display };
@@ -8,7 +9,11 @@ use derive_more::{ Error, Display };
 mod routes;
 
 pub async fn start() -> std::io::Result<()> {
-	HttpServer::new(|| App::new().configure(routes::configure))
+	HttpServer::new(||
+		App::new()
+			.wrap(Logger::new("%r  →  %s, %b bytes, took %Dms"))
+			.configure(routes::configure)
+	)
 		.bind(("127.0.0.1", 8080))?
 		.run()
 		.await
