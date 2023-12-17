@@ -2,6 +2,7 @@ use serde::{ Serialize, Deserialize };
 use serde_repr::*;
 
 use crate::{
+	http::{ ApiError, ApiResult },
 	discord::DiscordMember,
 	commands::COMMANDS,
 	SlashResponse
@@ -111,53 +112,54 @@ pub enum InteractionResponseData {
 
 // i don't like this structure
 #[derive(Serialize)]
-struct InteractionResponse {
+pub struct InteractionResponse {
 	#[serde(rename = "type")]
 	kind: InteractionResponseKind,
 	data: Option<InteractionResponseData>
 }
 
-pub async fn handle_request(body: String) -> impl actix_web::Responder {
+pub async fn handle_request(body: String) -> ApiResult<InteractionResponse> {
 	let payload: InteractionPayload = serde_json::from_str(&body).unwrap();
 	match payload.kind {
+		InteractionKind::Ping => Ok(actix_web::web::Json(InteractionResponse {
+			kind: InteractionResponseKind::Pong,
+			data: None
+		})),
 		InteractionKind::ApplicationCommand => {
 			if let Some(ref data) = payload.data {
 				if let Some(command) = COMMANDS.iter().find(|x| x.name == data.name) {
 					println!("executing {}", command.name);
 					if let Some(callback) = command.slash_action {
-						return match callback(payload).await {
+						return Ok(actix_web::web::Json(match callback(payload).await {
 							SlashResponse::Message { flags, content } =>
-								actix_web::web::Json(InteractionResponse {
+								InteractionResponse {
 									kind: InteractionResponseKind::ChannelMessageWithSource,
 									data: Some(InteractionResponseData::ChannelMessageWithSource {
 										flags,
 										embeds: None,
 										content
 									})
-								}),
+								},
 							SlashResponse::DeferMessage =>
-								actix_web::web::Json(InteractionResponse {
+								InteractionResponse {
 									kind: InteractionResponseKind::DeferredChannelMessageWithSource,
 									data: Some(InteractionResponseData::DeferredChannelMessageWithSource {
 										flags: 64
 									})
-								})
-						};
+								}
+						}));
 					}
 				}
 			}
-			actix_web::web::Json(InteractionResponse {
+			Ok(actix_web::web::Json(InteractionResponse {
 				kind: InteractionResponseKind::ChannelMessageWithSource,
 				data: Some(InteractionResponseData::ChannelMessageWithSource {
 					flags: None,
 					embeds: None,
 					content: Some("PLACEHOLDER?!?!?!?".into())
 				})
-			})
+			}))
 		},
-		_ => actix_web::web::Json(InteractionResponse {
-			kind: InteractionResponseKind::Pong,
-			data: None
-		})
+		_ => Err(ApiError::NotImplemented)
 	}
 }

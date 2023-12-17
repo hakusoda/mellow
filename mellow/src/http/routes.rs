@@ -1,17 +1,27 @@
 use serde::Deserialize;
-use actix_web::{ get, web, post, Responder, HttpRequest, HttpResponse };
-use derive_more::{ Error, Display };
-use ed25519_dalek::{ Verifier, Signature, VerifyingKey };
+use once_cell::sync::Lazy;
+use actix_web::{
+	Responder, HttpRequest, HttpResponse,
+	get, web, post
+};
+use ed25519_dalek::{ Verifier, Signature, VerifyingKey, SignatureError };
 
+use super::{ ApiError, ApiResult };
 use crate::{
 	discord::get_member,
 	syncing::{ SyncMemberResult, SIGN_UPS, sync_single_user },
 	database::get_users_by_discord,
-	interaction::handle_request
+	interaction
 };
 
 const API_KEY: &str = env!("API_KEY");
 const CARGO_PKG_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+const PUBLIC_KEY: Lazy<VerifyingKey> = Lazy::new(||
+	hex::decode(env!("DISCORD_PUBLIC_KEY"))
+		.map(|vec| VerifyingKey::from_bytes(&vec.try_into().unwrap()).unwrap())
+		.unwrap()
+);
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg
@@ -26,14 +36,18 @@ async fn index() -> impl Responder {
 }
 
 #[post("/interactions")]
-async fn interactions(request: HttpRequest, body: String) -> impl Responder {
+async fn interactions(request: HttpRequest, body: String) -> ApiResult<interaction::InteractionResponse> {
 	let headers = request.headers();
-	let body = parse_body(
-		body,
-		headers.get("x-signature-ed25519").unwrap().to_str().unwrap(),
-		headers.get("x-signature-timestamp").unwrap().to_str().unwrap()
-	);
-    handle_request(body).await
+	let signature = headers.get("x-signature-ed25519")
+		.and_then(|x| x.to_str().ok())
+		.ok_or_else(|| ApiError::GenericInvalidRequest)?;
+	let timestamp = headers.get("x-signature-timestamp")
+		.and_then(|x| x.to_str().ok())
+		.ok_or_else(|| ApiError::GenericInvalidRequest)?;
+	if let Err(_) = verify_interaction_body(&body, signature, timestamp) {
+		return Err(ApiError::InvalidSignature);
+	}
+    interaction::handle_request(body).await
 }
 
 #[derive(Deserialize)]
@@ -42,18 +56,9 @@ struct SyncMemberPayload {
 	webhook_token: Option<String>
 }
 
-#[derive(Debug, Display, Error)]
-#[display(fmt = "API Error: {}", error)]
-struct ApiError {
-	error: &'static str
-}
-
-impl actix_web::error::ResponseError for ApiError {}
-
-type ApiResult<T> = actix_web::Result<web::Json<T>, ApiError>;
-
 #[post("/server/{server_id}/member/{user_id}/sync")]
 async fn sync_member(request: HttpRequest, body: web::Json<SyncMemberPayload>, path: web::Path<(String, String)>) -> ApiResult<SyncMemberResult> {
+	// TODO: make this... easier on the eyes.
 	if request.headers().get("x-api-key").map_or(false, |x| x.to_str().unwrap() == API_KEY.to_string()) {
 		let (server_id, user_id) = path.into_inner();
 		if let Some(user) = get_users_by_discord(vec![user_id.clone()], server_id.clone()).await.into_iter().next() {
@@ -66,24 +71,20 @@ async fn sync_member(request: HttpRequest, body: web::Json<SyncMemberPayload>, p
 				} else { None };
 				SIGN_UPS.write().await.retain(|x| x.user_id != user_id);
 
-				return result.map(|x| web::Json(x)).ok_or(ApiError { error: "sign_up_not_found" });
+				return result.map(|x| web::Json(x)).ok_or(ApiError::SignUpNotFound);
 			} else {
 				sync_single_user(&user, &member, server_id).await
 			}));
 		}
-		Err(ApiError { error: "user_not_found" })
-	} else { Err(ApiError { error: "invalid_api_key" }) }
+		Err(ApiError::UserNotFound)
+	} else { Err(ApiError::InvalidApiKey) }
 }
 
-fn parse_body(body: String, signature: &str, timestamp: &str) -> String {
-	let public_key = hex::decode(env!("DISCORD_PUBLIC_KEY"))
-        .map(|vec| VerifyingKey::from_bytes(&vec.try_into().unwrap()).unwrap())
-		.unwrap();
-	public_key.verify(
-        format!("{}{}", timestamp, body).as_bytes(),
-        &hex::decode(signature)
+fn verify_interaction_body(body: impl Into<String>, signature: impl Into<String>, timestamp: impl Into<String>) -> Result<(), SignatureError> {
+	PUBLIC_KEY.verify(
+        format!("{}{}", timestamp.into(), body.into()).as_bytes(),
+        &hex::decode(signature.into())
             .map(|vec| Signature::from_bytes(&vec.try_into().unwrap()))
 			.unwrap()
-    ).unwrap();
-	body
+    )
 }
