@@ -20,20 +20,20 @@ pub struct SyncMemberResult {
 	pub relevant_connections: Vec<UserConnection>
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct RoleChange {
 	pub kind: RoleChangeKind,
 	pub target_id: String,
 	pub display_name: String
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum RoleChangeKind {
 	Added,
 	Removed
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct NicknameChange(pub Option<String>, pub Option<String>);
 
 #[derive(Debug)]

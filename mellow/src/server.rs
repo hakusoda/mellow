@@ -7,51 +7,51 @@ use crate::{
 	interaction::{ Embed, EmbedField, EmbedAuthor }
 };
 
-#[derive(Debug)]
-pub struct Log {
-	pub kind: LogKind,
-	pub data: serde_json::Value
-}
-
-#[derive(Clone, Debug)]
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(tag = "type", content = "data")]
 #[repr(u8)]
-pub enum LogKind {
-	#[allow(dead_code)]
-	AuditLog = 1 << 0,
-	ServerProfileSync = 1 << 1
+pub enum ServerLog {
+	AuditLog {
+
+	} = 1 << 0,
+	ServerProfileSync {
+		member: DiscordMember,
+		forced_by: Option<DiscordMember>,
+		role_changes: Vec<RoleChange>,
+		nickname_change: Option<NicknameChange>,
+		relevant_connections: Vec<UserConnection>
+	} = 1 << 1
 }
 
-#[derive(Serialize, Deserialize)]
-struct ServerProfileSyncLog {
-	member: DiscordMember,
-	role_changes: Vec<RoleChange>,
-	nickname_change: Option<NicknameChange>,
-	relevant_connections: Vec<UserConnection>
+impl ServerLog {
+    fn discriminant(&self) -> u8 {
+        unsafe { *(self as *const Self as *const u8) }
+    }
 }
 
-pub async fn send_logs(server: &Server, logs: Vec<Log>) {
+pub async fn send_logs(server: &Server, logs: Vec<ServerLog>) {
 	if let Some(channel_id) = &server.logging_channel_id {
 		let mut embeds: Vec<Embed> = vec![];
 		for log in logs {
-			if (server.logging_types & log.kind.clone() as u8) == log.kind.clone() as u8 {
-				match log.kind {
-					LogKind::AuditLog => {
+			let value = log.discriminant();
+			if (server.logging_types & value) == value {
+				match log {
+					ServerLog::AuditLog {} => {
 						unimplemented!()
 					},
-					LogKind::ServerProfileSync => {
-						let data: ServerProfileSyncLog = serde_json::from_value(log.data).unwrap();
+					ServerLog::ServerProfileSync { member, forced_by, role_changes, nickname_change, relevant_connections } => {
 						let mut fields: Vec<EmbedField> = vec![];
-						if !data.role_changes.is_empty() {
+						if !role_changes.is_empty() {
 							fields.push(EmbedField {
 								name: "Role changes".into(),
-								value: format!("```diff\n{}```", data.role_changes.iter().map(|x| match x.kind {
+								value: format!("```diff\n{}```", role_changes.iter().map(|x| match x.kind {
 									RoleChangeKind::Added => format!("+ {}", x.display_name),
 									RoleChangeKind::Removed => format!("- {}", x.display_name)
 								}).collect::<Vec<String>>().join("\n")),
 								inline: None
 							});
 						}
-						if let Some(changes) = data.nickname_change {
+						if let Some(changes) = nickname_change {
 							fields.push(EmbedField {
 								name: "Nickname changes".into(),
 								value: format!("```diff{}{}```",
@@ -61,20 +61,23 @@ pub async fn send_logs(server: &Server, logs: Vec<Log>) {
 								inline: None
 							});
 						}
-						if !data.relevant_connections.is_empty() {
+						if !relevant_connections.is_empty() {
 							fields.push(EmbedField {
 								name: "Relevant connections".into(),
-								value: data.relevant_connections.iter().map(|x| x.display()).collect::<Vec<String>>().join("\n"),
+								value: relevant_connections.iter().map(|x| x.display()).collect::<Vec<String>>().join("\n"),
 								inline: None
 							});
 						}
 
 						embeds.push(Embed {
-							title: Some(format!("{} synced their profile", data.member.user.global_name.clone().unwrap_or(data.member.user.username))),
+							title: Some(forced_by.and_then(|x| if x.user.id == member.user.id { None } else { Some(x) }).map_or_else(
+								|| format!("{} synced their profile", member.display_name()),
+								|x| format!("{} forcefully synced {}'s profile", x.display_name(), member.display_name())
+							)),
 							author: Some(EmbedAuthor {
-								url: Some(format!("https://hakumi.cafe/mellow/server/{}/member/{}", server.id, data.member.user.id)),
-								name: data.member.user.global_name,
-								icon_url: data.member.avatar.or(data.member.user.avatar).map(|x| format!("https://cdn.discordapp.com/avatars/{}/{x}.webp?size=48", data.member.user.id)),
+								url: Some(format!("https://hakumi.cafe/mellow/server/{}/member/{}", server.id, member.user.id)),
+								name: member.user.global_name,
+								icon_url: member.avatar.or(member.user.avatar).map(|x| format!("https://cdn.discordapp.com/avatars/{}/{x}.webp?size=48", member.user.id)),
 								..Default::default()
 							}),
 							fields: Some(fields),

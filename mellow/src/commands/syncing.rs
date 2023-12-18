@@ -2,7 +2,7 @@ use tokio::time;
 use mellow_macros::command;
 
 use crate::{
-	server::{ Log, LogKind, send_logs },
+	server::{ ServerLog, send_logs },
 	discord::{ DiscordMember, get_members, edit_original_response },
 	syncing::{ RoleChangeKind, SyncMemberResult, sync_member, create_sign_up, get_connection_metadata, sync_single_user },
 	database::{ UserResponse, get_server, get_users_by_discord },
@@ -54,14 +54,12 @@ pub async fn sync_with_token(user: UserResponse, member: DiscordMember, guild_id
 	}).await;
 
 	if result.profile_changed {
-		send_logs(&result.server, vec![Log {
-			kind: LogKind::ServerProfileSync,
-			data: serde_json::json!({
-				"member": member,
-				"role_changes": result.role_changes,
-				"nickname_change": result.nickname_change,
-				"relevant_connections": result.relevant_connections
-			})
+		send_logs(&result.server, vec![ServerLog::ServerProfileSync {
+			member,
+			forced_by: None,
+			role_changes: result.role_changes.clone(),
+			nickname_change: result.nickname_change.clone(),
+			relevant_connections: result.relevant_connections.clone()
 		}]).await;
 	}
 
@@ -96,7 +94,7 @@ pub async fn forcesyncall(interaction: InteractionPayload) -> SlashResponse {
 
 		let metadata = get_connection_metadata(&users, &server).await;
 
-		let mut logs: Vec<Log> = vec![];
+		let mut logs: Vec<ServerLog> = vec![];
 		let mut total_synced = 0;
 		let mut total_changed = 0;
 
@@ -108,13 +106,12 @@ pub async fn forcesyncall(interaction: InteractionPayload) -> SlashResponse {
 				time::sleep(time::Duration::from_secs(1)).await;
 				total_changed += 1;
 
-				logs.push(Log {
-					kind: LogKind::ServerProfileSync,
-					data: serde_json::json!({
-						"member": member,
-						"role_changes": result.role_changes,
-						"relevant_connections": result.relevant_connections
-					})
+				logs.push(ServerLog::ServerProfileSync {
+					member,
+					forced_by: interaction.member.clone(),
+					role_changes: result.role_changes,
+					nickname_change: result.nickname_change,
+					relevant_connections: result.relevant_connections
 				});
 			}
 

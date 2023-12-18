@@ -90,7 +90,7 @@ pub async fn create_channel_message(channel_id: &String, payload: ChannelMessage
 		.unwrap();
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct DiscordUser {
 	pub id: String,
 	pub bot: Option<bool>,
@@ -102,7 +102,13 @@ pub struct DiscordUser {
 	pub avatar_decoration: Option<String>
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+impl DiscordUser {
+	pub fn display_name(&self) -> String {
+		self.global_name.as_ref().unwrap_or(&self.username).clone()
+	}
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct DiscordMember {
 	pub deaf: bool,
 	pub mute: bool,
@@ -113,6 +119,12 @@ pub struct DiscordMember {
 	pub pending: bool,
 	pub joined_at: String,
 	pub permissions: Option<String>
+}
+
+impl DiscordMember {
+	pub fn display_name(&self) -> String {
+		self.nick.as_ref().map_or_else(|| self.user.display_name(), |x| x.clone())
+	}
 }
 
 /*pub struct Ratelimit {
