@@ -3,7 +3,7 @@ use once_cell::sync::Lazy;
 use postgrest::Postgrest;
 use serde_repr::*;
 
-pub static DATABASE: Lazy<Postgrest> = Lazy::new(|| {
+pub const DATABASE: Lazy<Postgrest> = Lazy::new(|| {
 	let key = env!("SUPABASE_API_KEY");
 	Postgrest::new("https://gzlrrsjtbzflasxukxki.supabase.co/rest/v1")
 		.insert_header("apikey", key)

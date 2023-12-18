@@ -4,8 +4,8 @@ use once_cell::sync::Lazy;
 
 use crate::interaction::{ Embed, InteractionResponseData };
 
-static APP_ID: &'static str = env!("DISCORD_APP_ID");
-static CLIENT: Lazy<Client> = Lazy::new(||
+const APP_ID: &str = env!("DISCORD_APP_ID");
+const CLIENT: Lazy<Client> = Lazy::new(||
 	Client::builder()
 		.default_headers({
 			let mut headers = header::HeaderMap::new();

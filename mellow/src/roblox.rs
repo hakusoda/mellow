@@ -2,7 +2,7 @@ use serde::Deserialize;
 use reqwest::{ header, Client };
 use once_cell::sync::Lazy;
 
-static CLIENT: Lazy<Client> = Lazy::new(||
+const CLIENT: Lazy<Client> = Lazy::new(||
 	Client::builder()
 		.default_headers({
 			let mut headers = header::HeaderMap::new();
