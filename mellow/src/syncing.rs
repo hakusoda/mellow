@@ -7,7 +7,7 @@ use async_recursion::async_recursion;
 use crate::{
 	roblox::get_user_group_roles,
 	discord::{ DiscordRole, DiscordMember, DiscordModifyMemberPayload, modify_member, get_guild_roles },
-	database::{ User, Server, UserResponse, UserConnection, ProfileSyncAction, UserConnectionKind, ProfileSyncActionKind, ProfileSyncActionRequirementKind, ProfileSyncActionRequirementsKind, get_server }
+	database::{ User, Server, UserResponse, UserConnection, ProfileSyncAction, UserConnectionKind, UserServerConnection, ProfileSyncActionKind, ProfileSyncActionRequirementKind, ProfileSyncActionRequirementsKind, DATABASE, get_server }
 };
 
 #[derive(Debug, Serialize)]
@@ -110,7 +110,7 @@ pub async fn sync_member(user: Option<&User>, member: &DiscordMember, server: &S
 	let mut roles = member.roles.clone();
 	let mut role_changes: Vec<RoleChange> = vec![];
 	let mut requirement_cache: HashMap<String, bool> = HashMap::new();
-	let mut used_connections: Vec<UserConnection> = vec![];
+	let mut used_connections: Vec<UserServerConnection> = vec![];
 	
 	let actions2 = server.actions.clone();
 	for action in server.actions.iter() {
@@ -174,12 +174,25 @@ pub async fn sync_member(user: Option<&User>, member: &DiscordMember, server: &S
 		}).await;
 	}
 
+	if !used_connections.is_empty() {
+		let connections = used_connections.clone();
+		tokio::spawn(async move {
+			DATABASE
+				.from("mellow_user_server_connections")
+				.update(format!(r#"{{ "last_used_at": "{}" }}"#, chrono::Local::now()))
+				.in_("id", connections.iter().map(|x| x.id.clone()))
+				.execute()
+				.await
+				.unwrap();
+		});
+	}
+
 	SyncMemberResult {
 		server: server.clone(),
 		role_changes,
 		profile_changed,
 		nickname_change,
-		relevant_connections: used_connections
+		relevant_connections: used_connections.into_iter().map(|x| x.connection).collect()
 	}
 }
 
@@ -190,7 +203,7 @@ pub async fn member_meets_action_requirements(
 	all_actions: &Vec<ProfileSyncAction>,
 	connection_metadata: &ConnectionMetadata,
 	cache: &mut HashMap<String, bool>,
-	used_connections: &mut Vec<UserConnection>
+	used_connections: &mut Vec<UserServerConnection>
 ) -> bool {
 	let mut total_met = 0;
 	let requires_one = matches!(action.requirements_type, ProfileSyncActionRequirementsKind::MeetOne);
@@ -202,8 +215,8 @@ pub async fn member_meets_action_requirements(
 			ProfileSyncActionRequirementKind::RobloxHaveGroupRankInRange => {
 				let connection = user.and_then(|x| x.connections.iter().find(|x| matches!(x.connection.kind, UserConnectionKind::Roblox)));
 				if let Some(connection) = connection.cloned() {
-					if !used_connections.contains(&connection.connection) {
-						used_connections.push(connection.connection);
+					if !used_connections.contains(&connection) {
+						used_connections.push(connection);
 					}
 				}
 

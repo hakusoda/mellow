@@ -72,6 +72,7 @@ pub async fn send_logs(server: &Server, logs: Vec<Log>) {
 						embeds.push(Embed {
 							title: Some(format!("{} synced their profile", data.member.user.global_name.clone().unwrap_or(data.member.user.username))),
 							author: Some(EmbedAuthor {
+								url: Some(format!("https://hakumi.cafe/mellow/server/{}/member/{}", server.id, data.member.user.id)),
 								name: data.member.user.global_name,
 								icon_url: data.member.avatar.or(data.member.user.avatar).map(|x| format!("https://cdn.discordapp.com/avatars/{}/{x}.webp?size=48", data.member.user.id)),
 								..Default::default()
