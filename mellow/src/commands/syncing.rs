@@ -2,7 +2,7 @@ use tokio::time;
 use mellow_macros::command;
 
 use crate::{
-	server::{ ServerLog, send_logs },
+	server::ServerLog,
 	discord::{ DiscordMember, get_members, edit_original_response },
 	syncing::{ RoleChangeKind, SyncMemberResult, sync_member, create_sign_up, get_connection_metadata, sync_single_user },
 	database::{ UserResponse, get_server, get_users_by_discord },
@@ -54,7 +54,7 @@ pub async fn sync_with_token(user: UserResponse, member: DiscordMember, guild_id
 	}).await;
 
 	if result.profile_changed {
-		send_logs(&result.server, vec![ServerLog::ServerProfileSync {
+		result.server.send_logs(vec![ServerLog::ServerProfileSync {
 			member,
 			forced_by: None,
 			role_changes: result.role_changes.clone(),
@@ -125,7 +125,7 @@ pub async fn forcesyncall(interaction: InteractionPayload) -> SlashResponse {
 		}).await;
 
 		if !logs.is_empty() {
-			send_logs(&server, logs).await;
+			server.send_logs(logs).await;
 		}
 	});
 	SlashResponse::DeferMessage

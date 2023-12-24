@@ -1,12 +1,11 @@
 use actix_web::{
-	web,
 	http::{ StatusCode, header::ContentType },
 	middleware::Logger,
 	App, HttpServer, HttpResponse
 };
 use derive_more::{ Error, Display };
 
-mod routes;
+pub mod routes;
 
 pub async fn start() -> std::io::Result<()> {
 	HttpServer::new(||
@@ -21,6 +20,9 @@ pub async fn start() -> std::io::Result<()> {
 
 #[derive(Debug, Display, Error)]
 pub enum ApiError {
+	#[display(fmt = "internal_error")]
+	InternalError,
+
 	#[display(fmt = "invalid_request")]
 	GenericInvalidRequest,
 
@@ -44,21 +46,22 @@ impl actix_web::error::ResponseError for ApiError {
 	fn error_response(&self) -> HttpResponse {
 		HttpResponse::build(self.status_code())
 			.insert_header(ContentType::json())
-			.body(format!(r#"
+			.body(format!(r#"{{
 				"error": "{}"
-			"#, self.to_string()))
+			}}"#, self.to_string()))
 	}
 
 	fn status_code(&self) -> StatusCode {
 		match *self {
+			ApiError::InternalError => StatusCode::INTERNAL_SERVER_ERROR,
 			ApiError::GenericInvalidRequest => StatusCode::BAD_REQUEST,
 			ApiError::InvalidApiKey |
 			ApiError::InvalidSignature => StatusCode::FORBIDDEN,
 			ApiError::UserNotFound |
 			ApiError::SignUpNotFound => StatusCode::NOT_FOUND,
-			ApiError::NotImplemented => StatusCode::NOT_IMPLEMENTED
+			ApiError::NotImplemented => StatusCode::NOT_IMPLEMENTED,
 		}
 	}
 }
 
-pub type ApiResult<T> = actix_web::Result<web::Json<T>, ApiError>;
+pub type ApiResult<T> = actix_web::Result<T, ApiError>;

@@ -119,7 +119,7 @@ pub struct InteractionResponse {
 	data: Option<InteractionResponseData>
 }
 
-pub async fn handle_request(body: String) -> ApiResult<InteractionResponse> {
+pub async fn handle_request(body: String) -> ApiResult<Json<InteractionResponse>> {
 	let payload: InteractionPayload = serde_json::from_str(&body).unwrap();
 	match payload.kind {
 		InteractionKind::Ping => Ok(Json(InteractionResponse {
