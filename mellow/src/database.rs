@@ -160,3 +160,17 @@ pub async fn get_server(id: impl Into<String>) -> Server {
 		.unwrap()
 	).unwrap()
 }
+
+pub async fn server_exists(id: impl Into<String>) -> bool {
+	// this isn't an ideal method, but this rust library is way too limited, especially when compared to postgrest-js...
+	DATABASE.from("mellow_servers")
+		.select("id")
+		.eq("id", id.into())
+		.limit(1)
+		.single()
+		.execute()
+		.await
+		.unwrap()
+		.status()
+		.is_success()
+}

@@ -66,31 +66,32 @@ pub async fn sync_with_token(user: UserResponse, member: DiscordMember, guild_id
 	result
 }
 
-#[command]
+// TODO: allow users to sync in dms via some sort of server selection
+#[command(no_dm, description = "Sync your server profile. (may contain traces of burgers)")]
 pub async fn sync(interaction: InteractionPayload) -> SlashResponse {
 	let guild_id = interaction.guild_id.clone().unwrap();
 	let member = interaction.member.unwrap();
-	if let Some(user) = get_users_by_discord(vec![member.user.id.clone()], guild_id.clone()).await.into_iter().next() {
+	if let Some(user) = get_users_by_discord(vec![member.id()], guild_id.clone()).await.into_iter().next() {
 		tokio::spawn(async move {
 			sync_with_token(user, member, &guild_id, &interaction.token).await;
 		});
 		return SlashResponse::DeferMessage;
 	}
 
-	create_sign_up(member.user.id, guild_id, interaction.token).await;
+	create_sign_up(member.id(), guild_id, interaction.token).await;
 	SlashResponse::Message {
 		flags: Some(64),
 		content: Some(format!("## Hello, welcome to the server!\nYou appear to be new to mellow, this server uses mellow to sync member profiles with external services, such as Roblox.\nIf you would like to continue, please continue [here](https://discord.com/api/oauth2/authorize?client_id=1068554282481229885&redirect_uri=https%3A%2F%2Fapi.hakumi.cafe%2Fv0%2Fauth%2Fcallback%2F0&response_type=code&scope=identify&state=mlw{}mlw), don't worry, it shouldn't take long!", interaction.guild_id.unwrap()))
 	}
 }
 
-#[command]
+#[command(no_dm, description = "Forcefully sync every member in the server.", default_member_permissions = "0")]
 pub async fn forcesyncall(interaction: InteractionPayload) -> SlashResponse {
 	tokio::spawn(async move {
 		let guild_id = interaction.guild_id.unwrap();
 		let server = get_server(&guild_id).await;
 		let members = get_members(&guild_id).await;
-		let users = get_users_by_discord(members.iter().map(|x| x.user.id.clone()).collect(), guild_id).await;
+		let users = get_users_by_discord(members.iter().map(|x| x.id()).collect(), guild_id).await;
 
 		let metadata = get_connection_metadata(&users, &server).await;
 
@@ -100,7 +101,7 @@ pub async fn forcesyncall(interaction: InteractionPayload) -> SlashResponse {
 
 		let mut guild_roles = None;
 		for member in members {
-			let result = sync_member(users.iter().find(|x| x.sub == member.user.id).map(|x| &x.user), &member, &server, &metadata, &mut guild_roles).await;
+			let result = sync_member(users.iter().find(|x| x.sub == member.id()).map(|x| &x.user), &member, &server, &metadata, &mut guild_roles).await;
 			if result.profile_changed {
 				// sleep for one second to avoid hitting Discord ratelimit
 				time::sleep(time::Duration::from_secs(1)).await;

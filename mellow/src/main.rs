@@ -13,7 +13,10 @@ mod interaction;
 
 pub struct Command {
 	name: &'static str,
-	slash_action: Option<fn(InteractionPayload) -> BoxFuture<'static, SlashResponse>>
+	no_dm: bool,
+	description: Option<String>,
+	slash_action: Option<fn(InteractionPayload) -> BoxFuture<'static, SlashResponse>>,
+	default_member_permissions: Option<String>
 }
 
 pub enum SlashResponse {

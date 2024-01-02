@@ -167,7 +167,7 @@ pub async fn sync_member(user: Option<&User>, member: &DiscordMember, server: &S
 	
 	let profile_changed = !role_changes.is_empty() || nickname_change.is_some();
 	if profile_changed {
-		modify_member(server.id.clone(), member.user.id.clone(), DiscordModifyMemberPayload {
+		modify_member(server.id.clone(), member.id(), DiscordModifyMemberPayload {
 			nick: target_nickname,
 			roles: Some(roles),
 			..Default::default()

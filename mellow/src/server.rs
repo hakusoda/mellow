@@ -86,14 +86,14 @@ impl Server {
 							}
 	
 							embeds.push(Embed {
-								title: Some(forced_by.and_then(|x| if x.user.id == member.user.id { None } else { Some(x) }).map_or_else(
+								title: Some(forced_by.and_then(|x| if x.id() == member.id() { None } else { Some(x) }).map_or_else(
 									|| format!("{} synced their profile", member.display_name()),
 									|x| format!("{} forcefully synced {}'s profile", x.display_name(), member.display_name())
 								)),
 								author: Some(EmbedAuthor {
-									url: Some(format!("https://hakumi.cafe/mellow/server/{}/member/{}", self.id, member.user.id)),
-									name: member.user.global_name,
-									icon_url: member.avatar.or(member.user.avatar).map(|x| format!("https://cdn.discordapp.com/avatars/{}/{x}.webp?size=48", member.user.id)),
+									url: Some(format!("https://hakumi.cafe/mellow/server/{}/member/{}", self.id, member.id())),
+									name: member.user.global_name.clone(),
+									icon_url: member.avatar.as_ref().or(member.user.avatar.as_ref()).map(|x| format!("https://cdn.discordapp.com/avatars/{}/{x}.webp?size=48", member.id())),
 									..Default::default()
 								}),
 								fields: Some(fields),

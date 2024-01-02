@@ -4,8 +4,8 @@ use once_cell::sync::Lazy;
 
 use crate::interaction::{ Embed, InteractionResponseData };
 
-const APP_ID: &str = env!("DISCORD_APP_ID");
-const CLIENT: Lazy<Client> = Lazy::new(||
+pub const APP_ID: &str = env!("DISCORD_APP_ID");
+pub const CLIENT: Lazy<Client> = Lazy::new(||
 	Client::builder()
 		.default_headers({
 			let mut headers = header::HeaderMap::new();
@@ -91,6 +91,22 @@ pub async fn create_channel_message(channel_id: &String, payload: ChannelMessage
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct DiscordGuild {
+	pub name: String,
+	pub icon: Option<String>
+}
+
+pub async fn get_guild(guild_id: impl Into<String>) -> DiscordGuild {
+	CLIENT.get(format!("https://discord.com/api/v10/guilds/{}", guild_id.into()))
+		.send()
+		.await
+		.unwrap()
+		.json()
+		.await
+		.unwrap()
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct DiscordUser {
 	pub id: String,
 	pub bot: Option<bool>,
@@ -122,6 +138,10 @@ pub struct DiscordMember {
 }
 
 impl DiscordMember {
+	pub fn id(&self) -> String {
+		self.user.id.clone()
+	}
+
 	pub fn display_name(&self) -> String {
 		self.nick.as_ref().map_or_else(|| self.user.display_name(), |x| x.clone())
 	}

@@ -11,9 +11,10 @@ use ed25519_dalek::{ Verifier, Signature, VerifyingKey, SignatureError };
 use super::{ ApiError, ApiResult };
 use crate::{
 	server::ServerLog,
-	discord::get_member,
+	discord::{ APP_ID, self, get_member },
 	syncing::{ SyncMemberResult, SIGN_UPS, sync_single_user },
 	database,
+	commands::COMMANDS,
 	interaction
 };
 
@@ -34,6 +35,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 		.service(index)
 		.service(interactions)
 		.service(sync_member)
+		.service(update_discord_commands)
 		.service(
 			web::scope("/absolutesolver")
 				.service(action_log_webhook)
@@ -142,6 +144,34 @@ fn absolutesolver(request: &HttpRequest, body: impl ToString) -> Result<(), ApiE
 			.as_slice()
 	)
 		.map_err(|_| ApiError::InvalidSignature)
+}
+
+#[derive(Serialize)]
+struct ApplicationCommand {
+	name: String,
+	description: String,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	dm_permission: Option<bool>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	default_member_permissions: Option<String>
+}
+
+#[post("/update_discord_commands")]
+async fn update_discord_commands(request: HttpRequest) -> ApiResult<HttpResponse> {
+	if request.headers().get("x-api-key").map_or(false, |x| x.to_str().unwrap() == API_KEY.to_string()) {
+		discord::CLIENT.put(format!("https://discord.com/api/v10/applications/{APP_ID}/commands"))
+			.json(&COMMANDS.iter().map(|x| ApplicationCommand {
+				name: x.name.to_string(),
+				description: x.description.clone().unwrap_or("there is no description yet, how sad...".into()),
+				dm_permission: Some(!x.no_dm),
+				default_member_permissions: x.default_member_permissions.clone()
+			}).collect::<Vec<ApplicationCommand>>())
+			.header("content-type", "application/json")
+			.send()
+			.await
+			.unwrap();
+		Ok(HttpResponse::Ok().finish())
+	} else { Err(ApiError::InvalidApiKey) }
 }
 
 fn verify_interaction_body(body: impl Into<String>, signature: impl Into<String>, timestamp: impl Into<String>) -> Result<(), SignatureError> {
