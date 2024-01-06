@@ -81,7 +81,7 @@ pub async fn sync(interaction: InteractionPayload) -> SlashResponse {
 	create_sign_up(member.id(), guild_id, interaction.token).await;
 	SlashResponse::Message {
 		flags: Some(64),
-		content: Some(format!("## Hello, welcome to the server!\nYou appear to be new to mellow, this server uses mellow to sync member profiles with external services, such as Roblox.\nIf you would like to continue, please continue [here](https://discord.com/api/oauth2/authorize?client_id=1068554282481229885&redirect_uri=https%3A%2F%2Fapi.hakumi.cafe%2Fv0%2Fauth%2Fcallback%2F0&response_type=code&scope=identify&state=mlw{}mlw), don't worry, it shouldn't take long!", interaction.guild_id.unwrap()))
+		content: Some(format!("## Hello, welcome to the server!\nYou appear to be new to mellow, this server uses mellow to sync member profiles with external services, such as Roblox.\nIf you would like to continue, please continue [here](https://discord.com/api/oauth2/authorize?client_id=1068554282481229885&redirect_uri=https%3A%2F%2Fapi.hakumi.cafe%2Fv0%2Fauth%2Fcallback%2Fmellow&response_type=code&scope=identify&state=sync_{}), don't worry, it shouldn't take long!", interaction.guild_id.unwrap()))
 	}
 }
 

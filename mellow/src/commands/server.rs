@@ -41,7 +41,7 @@ pub async fn setup(interaction: InteractionPayload) -> SlashResponse {
 		} else {
 			SlashResponse::Message {
 				flags: Some(64),
-				content: Some(format!("## Account not connected\nIt appears I do not recognise your wonderous face, you must be new!\n* Do you have a HAKUMI Account? If so, follow these [instructions](https://hakumi.cafe/docs/platform/account/connections), and then execute this command again.\n* If you're completely new, never heard of a HAKUMI, or even a measily marshmellow, simply [tap here](https://discord.com/api/oauth2/authorize?client_id=1068554282481229885&redirect_uri=https%3A%2F%2Fapi.hakumi.cafe%2Fv0%2Fauth%2Fcallback%2F0&response_type=code&scope=identify&state=mlw{guild_id}mlwSETUPmlws)!"))
+				content: Some(format!("## Account not connected\nIt appears I do not recognise your wonderous face, you must be new!\n* Do you have a HAKUMI Account? If so, follow these [instructions](https://hakumi.cafe/docs/platform/account/connections), and then execute this command again.\n* If you're completely new, never heard of a HAKUMI, or even a measily marshmellow, simply [tap here](https://discord.com/api/oauth2/authorize?client_id=1068554282481229885&redirect_uri=https%3A%2F%2Fapi.hakumi.cafe%2Fv0%2Fauth%2Fcallback%2Fmellow&response_type=code&scope=identify&state=setup_{guild_id})!"))
 			}
 		}
 	}
