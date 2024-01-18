@@ -5,7 +5,7 @@ use serde_repr::*;
 
 pub const DATABASE: Lazy<Postgrest> = Lazy::new(|| {
 	let key = env!("SUPABASE_API_KEY");
-	Postgrest::new("https://gzlrrsjtbzflasxukxki.supabase.co/rest/v1")
+	Postgrest::new("https://hakumi.supabase.co/rest/v1")
 		.insert_header("apikey", key)
 		.insert_header("authorization", format!("Bearer {}", key))
 });
