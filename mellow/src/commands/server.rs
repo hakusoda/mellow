@@ -26,7 +26,7 @@ pub async fn setup(interaction: InteractionPayload) -> SlashResponse {
 						"creator_id": "{}",
 						"avatar_url": "https://cdn.discordapp.com/icons/{guild_id}/{}.webp",
 						"owner_user_id": "{}"
-					}}"#, guild.name, user.sub, guild.icon.unwrap_or("".into()), user.sub))
+					}}"#, guild.name, user.user.id, guild.icon.unwrap_or("".into()), user.user.id))
 					.execute()
 					.await
 					.unwrap();
