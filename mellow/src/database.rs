@@ -58,11 +58,11 @@ pub struct UserResponse {
 	pub user: User
 }
 
-pub async fn get_users_by_discord(ids: Vec<String>, server_id: String) -> Vec<UserResponse> {
+pub async fn get_users_by_discord(ids: Vec<String>, server_id: impl Into<String>) -> Vec<UserResponse> {
 	serde_json::from_str(&DATABASE.from("user_connections")
 		.select("sub,user:users(id,connections:mellow_user_server_connections(id,connection:user_connections(sub,type,username,display_name)))")
 		.in_("sub", ids)
-		.eq("users.mellow_user_server_connections.server_id", server_id)
+		.eq("users.mellow_user_server_connections.server_id", server_id.into())
 		.execute().await.unwrap().text().await.unwrap()
 	).unwrap()
 }

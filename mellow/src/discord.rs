@@ -1,28 +1,14 @@
 use serde::{ Serialize, Deserialize };
-use reqwest::{ header, Client };
-use once_cell::sync::Lazy;
-
-use crate::interaction::{ Embed, InteractionResponseData };
+use crate::{
+	fetch::{ get_json, post_json, patch_json },
+	interaction::{ Embed, InteractionResponseData },
+	Result
+};
 
 pub const APP_ID: &str = env!("DISCORD_APP_ID");
-pub const CLIENT: Lazy<Client> = Lazy::new(||
-	Client::builder()
-		.default_headers({
-			let mut headers = header::HeaderMap::new();
-			headers.append("authorization", format!("Bot {}", env!("DISCORD_TOKEN")).parse().unwrap());
-			headers
-		})
-		.build()
-		.unwrap()
-);
 
-pub async fn edit_original_response(token: impl Into<String>, payload: InteractionResponseData) {
-	CLIENT.patch(format!("https://discord.com/api/v10/webhooks/{}/{}/messages/@original", APP_ID, token.into()))
-		.body(serde_json::to_string(&payload).unwrap())
-		.header("content-type", "application/json")
-		.send()
-		.await
-		.unwrap();
+pub async fn edit_original_response(token: impl Into<String>, payload: InteractionResponseData) -> Result<()> {
+	patch_json(format!("https://discord.com/api/v10/webhooks/{}/{}/messages/@original", APP_ID, token.into()), payload).await
 }
 
 #[derive(Serialize, Debug)]
@@ -57,13 +43,8 @@ impl Default for DiscordModifyMemberPayload {
 	}
 }
 
-pub async fn modify_member(guild_id: String, user_id: String, payload: DiscordModifyMemberPayload) {
-	CLIENT.patch(format!("https://discord.com/api/v10/guilds/{guild_id}/members/{user_id}"))
-		.body(serde_json::to_string(&payload).unwrap())
-		.header("content-type", "application/json")
-		.send()
-		.await
-		.unwrap();
+pub async fn modify_member(guild_id: String, user_id: String, payload: DiscordModifyMemberPayload) -> Result<()> {
+	patch_json(format!("https://discord.com/api/v10/guilds/{guild_id}/members/{user_id}"), payload).await
 }
 
 #[derive(Serialize, Deserialize)]
@@ -81,13 +62,8 @@ impl Default for ChannelMessage {
 	}
 }
 
-pub async fn create_channel_message(channel_id: &String, payload: ChannelMessage) {
-	CLIENT.post(format!("https://discord.com/api/v10/channels/{channel_id}/messages"))
-		.body(serde_json::to_string(&payload).unwrap())
-		.header("content-type", "application/json")
-		.send()
-		.await
-		.unwrap();
+pub async fn create_channel_message(channel_id: &String, payload: ChannelMessage) -> Result<()> {
+	post_json(format!("https://discord.com/api/v10/channels/{channel_id}/messages"), payload).await
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -96,14 +72,8 @@ pub struct DiscordGuild {
 	pub icon: Option<String>
 }
 
-pub async fn get_guild(guild_id: impl Into<String>) -> DiscordGuild {
-	CLIENT.get(format!("https://discord.com/api/v10/guilds/{}", guild_id.into()))
-		.send()
-		.await
-		.unwrap()
-		.json()
-		.await
-		.unwrap()
+pub async fn get_guild(guild_id: impl Into<String>) -> Result<DiscordGuild> {
+	get_json(format!("https://discord.com/api/v10/guilds/{}", guild_id.into())).await
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -147,28 +117,12 @@ impl DiscordMember {
 	}
 }
 
-/*pub struct Ratelimit {
-	pub wait_duration: Option<tokio::time::Duration>
-}*/
-
-pub async fn get_member(guild_id: impl Into<String>, user_id: impl Into<String>) -> DiscordMember {
-	CLIENT.get(format!("https://discord.com/api/v10/guilds/{}/members/{}", guild_id.into(), user_id.into()))
-		.send()
-		.await
-		.unwrap()
-		.json()
-		.await
-		.unwrap()
+pub async fn get_member(guild_id: impl Into<String>, user_id: impl Into<String>) -> Result<DiscordMember> {
+	get_json(format!("https://discord.com/api/v10/guilds/{}/members/{}", guild_id.into(), user_id.into())).await
 }
 
-pub async fn get_members(guild_id: impl Into<String>) -> Vec<DiscordMember> {
-	CLIENT.get(format!("https://discord.com/api/v10/guilds/{}/members?limit=100", guild_id.into()))
-		.send()
-		.await
-		.unwrap()
-		.json()
-		.await
-		.unwrap()
+pub async fn get_members(guild_id: impl Into<String>) -> Result<Vec<DiscordMember>> {
+	get_json(format!("https://discord.com/api/v10/guilds/{}/members?limit=100", guild_id.into())).await
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -186,12 +140,6 @@ pub struct DiscordRole {
 	pub unicode_emoji: Option<String>
 }
 
-pub async fn get_guild_roles(guild_id: impl Into<String>) -> Vec<DiscordRole> {
-	CLIENT.get(format!("https://discord.com/api/v10/guilds/{}/roles", guild_id.into()))
-		.send()
-		.await
-		.unwrap()
-		.json()
-		.await
-		.unwrap()
+pub async fn get_guild_roles(guild_id: impl Into<String>) -> Result<Vec<DiscordRole>> {
+	get_json(format!("https://discord.com/api/v10/guilds/{}/roles", guild_id.into())).await
 }

@@ -39,7 +39,10 @@ pub enum ApiError {
 	SignUpNotFound,
 
 	#[display(fmt = "not_implemented")]
-	NotImplemented
+	NotImplemented,
+
+	#[display(fmt = "unknown")]
+	Unknown
 }
 
 impl actix_web::error::ResponseError for ApiError {
@@ -53,14 +56,21 @@ impl actix_web::error::ResponseError for ApiError {
 
 	fn status_code(&self) -> StatusCode {
 		match *self {
+			ApiError::Unknown |
 			ApiError::InternalError => StatusCode::INTERNAL_SERVER_ERROR,
 			ApiError::GenericInvalidRequest => StatusCode::BAD_REQUEST,
 			ApiError::InvalidApiKey |
 			ApiError::InvalidSignature => StatusCode::FORBIDDEN,
 			ApiError::UserNotFound |
 			ApiError::SignUpNotFound => StatusCode::NOT_FOUND,
-			ApiError::NotImplemented => StatusCode::NOT_IMPLEMENTED,
+			ApiError::NotImplemented => StatusCode::NOT_IMPLEMENTED
 		}
+	}
+}
+
+impl From<crate::error::Error> for ApiError {
+	fn from(_value: crate::error::Error) -> Self {
+		Self::Unknown
 	}
 }
 

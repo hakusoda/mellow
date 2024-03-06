@@ -6,16 +6,18 @@ use actix_web::{
 	Responder, HttpRequest, HttpResponse,
 	get, web, post
 };
-use ed25519_dalek::{ Verifier, Signature, VerifyingKey, SignatureError };
+use ed25519_dalek::{ Verifier, Signature, VerifyingKey };
 
 use super::{ ApiError, ApiResult };
 use crate::{
+	fetch,
 	server::ServerLog,
-	discord::{ APP_ID, self, get_member },
+	discord::{ APP_ID, get_member },
 	syncing::{ SyncMemberResult, SIGN_UPS, sync_single_user },
 	database,
 	commands::COMMANDS,
-	interaction
+	interaction,
+	Result
 };
 
 type HmacSha256 = Hmac<Sha256>;
@@ -76,18 +78,18 @@ async fn sync_member(request: HttpRequest, body: web::Json<SyncMemberPayload>, p
 	if request.headers().get("x-api-key").map_or(false, |x| x.to_str().unwrap() == API_KEY.to_string()) {
 		let (server_id, user_id) = path.into_inner();
 		if let Some(user) = database::get_users_by_discord(vec![user_id.clone()], server_id.clone()).await.into_iter().next() {
-			let member = get_member(&server_id, &user_id).await;
+			let member = get_member(&server_id, &user_id).await.unwrap();
 			return Ok(web::Json(if let Some(token) = &body.webhook_token {
-				crate::commands::syncing::sync_with_token(user, member, &server_id, &token).await
+				crate::commands::syncing::sync_with_token(user, member, &server_id, &token).await?
 			} else if body.is_sign_up.is_some_and(|x| x) {
 				let result = if let Some(item) = SIGN_UPS.read().await.iter().find(|x| x.user_id == user_id && x.guild_id == server_id) {
-					Some(crate::commands::syncing::sync_with_token(user, member, &server_id, &item.interaction_token).await)
+					Some(crate::commands::syncing::sync_with_token(user, member, &server_id, &item.interaction_token).await?)
 				} else { None };
 				SIGN_UPS.write().await.retain(|x| x.user_id != user_id);
 
 				return result.map(|x| web::Json(x)).ok_or(ApiError::SignUpNotFound);
 			} else {
-				sync_single_user(&user, &member, server_id).await
+				sync_single_user(&user, &member, server_id).await.unwrap()
 			}));
 		}
 		Err(ApiError::UserNotFound)
@@ -125,17 +127,17 @@ async fn action_log_webhook(request: HttpRequest, body: String) -> ApiResult<Htt
 	database::get_server(&payload.server_id)
 		.await
 		.send_logs(vec![ServerLog::ActionLog(payload)])
-		.await;
+		.await?;
 
 	Ok(HttpResponse::Ok().finish())
 }
 
-fn absolutesolver(request: &HttpRequest, body: impl ToString) -> Result<(), ApiError> {
+fn absolutesolver(request: &HttpRequest, body: impl ToString) -> Result<()> {
 	let mut mac = HmacSha256::new_from_slice(ABSOLUTESOLVER)
 		.map_err(|_| ApiError::InternalError)?;
 	mac.update(body.to_string().as_bytes());
 
-	mac.verify_slice(
+	Ok(mac.verify_slice(
 		request.headers()
 			.get("absolutesolver")
 			.ok_or(ApiError::InvalidSignature)
@@ -143,7 +145,7 @@ fn absolutesolver(request: &HttpRequest, body: impl ToString) -> Result<(), ApiE
 			.map_err(|_| ApiError::InvalidSignature)?
 			.as_slice()
 	)
-		.map_err(|_| ApiError::InvalidSignature)
+		.map_err(|_| ApiError::InvalidSignature)?)
 }
 
 #[derive(Serialize)]
@@ -159,7 +161,7 @@ struct ApplicationCommand {
 #[post("/update_discord_commands")]
 async fn update_discord_commands(request: HttpRequest) -> ApiResult<HttpResponse> {
 	if request.headers().get("x-api-key").map_or(false, |x| x.to_str().unwrap() == API_KEY.to_string()) {
-		discord::CLIENT.put(format!("https://discord.com/api/v10/applications/{APP_ID}/commands"))
+		fetch::CLIENT.put(format!("https://discord.com/api/v10/applications/{APP_ID}/commands"))
 			.json(&COMMANDS.iter().map(|x| ApplicationCommand {
 				name: x.name.to_string(),
 				description: x.description.clone().unwrap_or("there is no description yet, how sad...".into()),
@@ -174,11 +176,11 @@ async fn update_discord_commands(request: HttpRequest) -> ApiResult<HttpResponse
 	} else { Err(ApiError::InvalidApiKey) }
 }
 
-fn verify_interaction_body(body: impl Into<String>, signature: impl Into<String>, timestamp: impl Into<String>) -> Result<(), SignatureError> {
-	PUBLIC_KEY.verify(
+fn verify_interaction_body(body: impl Into<String>, signature: impl Into<String>, timestamp: impl Into<String>) -> Result<()> {
+	Ok(PUBLIC_KEY.verify(
 		format!("{}{}", timestamp.into(), body.into()).as_bytes(),
 		&hex::decode(signature.into())
 			.map(|vec| Signature::from_bytes(&vec.try_into().unwrap()))
 			.unwrap()
-	)
+	)?)
 }

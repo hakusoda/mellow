@@ -7,7 +7,8 @@ use async_recursion::async_recursion;
 use crate::{
 	roblox::get_user_group_roles,
 	discord::{ DiscordRole, DiscordMember, DiscordModifyMemberPayload, modify_member, get_guild_roles },
-	database::{ User, Server, UserResponse, UserConnection, ProfileSyncAction, UserConnectionKind, UserServerConnection, ProfileSyncActionKind, ProfileSyncActionRequirementKind, ProfileSyncActionRequirementsKind, DATABASE, get_server }
+	database::{ User, Server, UserResponse, UserConnection, ProfileSyncAction, UserConnectionKind, UserServerConnection, ProfileSyncActionKind, ProfileSyncActionRequirementKind, ProfileSyncActionRequirementsKind, DATABASE, get_server },
+	Result
 };
 
 #[derive(Debug, Serialize)]
@@ -89,24 +90,24 @@ pub async fn get_connection_metadata(users: &[UserResponse], server: &Server) ->
 	}
 }
 
-async fn get_role_name(id: String, guild_id: impl Into<String>, roles: &mut Option<Vec<DiscordRole>>) -> String {
-	if roles.is_none() {
-		*roles = Some(get_guild_roles(guild_id).await);
-	}
-	if let Some(items) = roles {
-		return items.iter().find(|x| x.id == id).map_or("unknown role".into(), |x| x.name.clone());
-	}
-	unreachable!()
+async fn get_role_name(id: String, guild_id: impl Into<String>, roles: &mut Option<Vec<DiscordRole>>) -> Result<String> {
+	let items = match roles {
+		Some(x) => x,
+		None => {
+			*roles = Some(get_guild_roles(guild_id).await?);
+			roles.as_ref().unwrap()
+		}
+	};
+	return Ok(items.iter().find(|x| x.id == id).map_or("unknown role".into(), |x| x.name.clone()));
 }
 
-pub async fn sync_single_user(user: &UserResponse, member: &DiscordMember, guild_id: impl Into<String>) -> SyncMemberResult {
+pub async fn sync_single_user(user: &UserResponse, member: &DiscordMember, guild_id: impl Into<String>) -> Result<SyncMemberResult> {
 	let server = get_server(guild_id).await;
 	let metadata = get_connection_metadata(&vec![user.clone()], &server).await;
-
 	sync_member(Some(&user.user), &member, &server, &metadata, &mut None).await
 }
 
-pub async fn sync_member(user: Option<&User>, member: &DiscordMember, server: &Server, connection_metadata: &ConnectionMetadata, guild_roles: &mut Option<Vec<DiscordRole>>) -> SyncMemberResult {
+pub async fn sync_member(user: Option<&User>, member: &DiscordMember, server: &Server, connection_metadata: &ConnectionMetadata, guild_roles: &mut Option<Vec<DiscordRole>>) -> Result<SyncMemberResult> {
 	let mut roles = member.roles.clone();
 	let mut role_changes: Vec<RoleChange> = vec![];
 	let mut requirement_cache: HashMap<String, bool> = HashMap::new();
@@ -126,7 +127,7 @@ pub async fn sync_member(user: Option<&User>, member: &DiscordMember, server: &S
 							role_changes.push(RoleChange {
 								kind: RoleChangeKind::Added,
 								target_id: item.clone(),
-								display_name: get_role_name(item, &server.id, guild_roles).await
+								display_name: get_role_name(item, &server.id, guild_roles).await?
 							});
 						}
 					}
@@ -138,7 +139,7 @@ pub async fn sync_member(user: Option<&User>, member: &DiscordMember, server: &S
 							role_changes.push(RoleChange {
 								kind: RoleChangeKind::Removed,
 								target_id: item.clone(),
-								display_name: get_role_name(item.clone(), &server.id, guild_roles).await
+								display_name: get_role_name(item.clone(), &server.id, guild_roles).await?
 							});
 						}
 						roles = filtered;
@@ -171,7 +172,7 @@ pub async fn sync_member(user: Option<&User>, member: &DiscordMember, server: &S
 			nick: target_nickname,
 			roles: Some(roles),
 			..Default::default()
-		}).await;
+		}).await?;
 	}
 
 	if !used_connections.is_empty() {
@@ -187,13 +188,13 @@ pub async fn sync_member(user: Option<&User>, member: &DiscordMember, server: &S
 		});
 	}
 
-	SyncMemberResult {
+	Ok(SyncMemberResult {
 		server: server.clone(),
 		role_changes,
 		profile_changed,
 		nickname_change,
 		relevant_connections: used_connections.into_iter().map(|x| x.connection).collect()
-	}
+	})
 }
 
 #[async_recursion]

@@ -5,8 +5,20 @@ use crate::{
 	discord::{ DiscordMember, ChannelMessage, create_channel_message },
 	syncing::{ RoleChange, NicknameChange, RoleChangeKind },
 	database::{ Server, UserConnection },
-	interaction::{ Embed, EmbedField, EmbedAuthor }
+	interaction::{ Embed, EmbedField, EmbedAuthor },
+	Result
 };
+
+pub enum ProfileSyncKind {
+	Default,
+	NewMember
+}
+
+impl Default for ProfileSyncKind {
+	fn default() -> Self {
+		Self::Default
+	}
+}
 
 #[derive(Deserialize, Serialize)]
 #[serde(tag = "type", content = "data")]
@@ -14,6 +26,8 @@ use crate::{
 pub enum ServerLog {
 	ActionLog(ActionLogWebhookPayload) = 1 << 0,
 	ServerProfileSync {
+		#[serde(skip)]
+		kind: ProfileSyncKind,
 		member: DiscordMember,
 		forced_by: Option<DiscordMember>,
 		role_changes: Vec<RoleChange>,
@@ -29,7 +43,7 @@ impl ServerLog {
 }
 
 impl Server {
-	pub async fn send_logs(&self, logs: Vec<ServerLog>) {
+	pub async fn send_logs(&self, logs: Vec<ServerLog>) -> Result<()> {
 		if let Some(channel_id) = &self.logging_channel_id {
 			let mut embeds: Vec<Embed> = vec![];
 			for log in logs {
@@ -55,7 +69,7 @@ impl Server {
 								..Default::default()
 							});
 						},
-						ServerLog::ServerProfileSync { member, forced_by, role_changes, nickname_change, relevant_connections } => {
+						ServerLog::ServerProfileSync { kind, member, forced_by, role_changes, nickname_change, relevant_connections } => {
 							let mut fields: Vec<EmbedField> = vec![];
 							if !role_changes.is_empty() {
 								fields.push(EmbedField {
@@ -86,10 +100,13 @@ impl Server {
 							}
 	
 							embeds.push(Embed {
-								title: Some(forced_by.and_then(|x| if x.id() == member.id() { None } else { Some(x) }).map_or_else(
-									|| format!("{} synced their profile", member.display_name()),
-									|x| format!("{} forcefully synced {}'s profile", x.display_name(), member.display_name())
-								)),
+								title: Some(match kind {
+									ProfileSyncKind::Default => forced_by.and_then(|x| if x.id() == member.id() { None } else { Some(x) }).map_or_else(
+										|| format!("{} synced their profile", member.display_name()),
+										|x| format!("{} forcefully synced {}'s profile", x.display_name(), member.display_name())
+									),
+									ProfileSyncKind::NewMember => format!("{} joined and has been synced", member.display_name())
+								}),
 								author: Some(EmbedAuthor {
 									url: Some(format!("https://hakumi.cafe/mellow/server/{}/member/{}", self.id, member.id())),
 									name: member.user.global_name.clone(),
@@ -109,9 +126,11 @@ impl Server {
 					create_channel_message(channel_id, ChannelMessage {
 						embeds: Some(chunk.to_vec()),
 						..Default::default()
-					}).await;
+					}).await?;
 				}
 			}
 		}
+
+		Ok(())
 	}
 }
