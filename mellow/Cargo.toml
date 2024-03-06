@@ -1,7 +1,7 @@
 [package]
 name = "mellow"
 authors = ["katsumi143 <32640219+katsumi143@users.noreply.github.com>"]
-version = "0.3.0"
+version = "0.4.0"
 description = "now here's the syncer"
 
 readme = "../README.md"
