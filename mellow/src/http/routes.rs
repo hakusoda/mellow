@@ -78,7 +78,7 @@ async fn sync_member(request: HttpRequest, body: web::Json<SyncMemberPayload>, p
 	if request.headers().get("x-api-key").map_or(false, |x| x.to_str().unwrap() == API_KEY.to_string()) {
 		let (server_id, user_id) = path.into_inner();
 		if let Some(user) = database::get_user_by_discord(&user_id, &server_id).await? {
-			let member = get_member(&server_id, &user_id).await.unwrap();
+			let member = get_member(&server_id, &user_id).await?;
 			return Ok(web::Json(if let Some(token) = &body.webhook_token {
 				crate::commands::syncing::sync_with_token(user, member, &server_id, &token).await?
 			} else if body.is_sign_up.is_some_and(|x| x) {
@@ -89,7 +89,7 @@ async fn sync_member(request: HttpRequest, body: web::Json<SyncMemberPayload>, p
 
 				return result.map(|x| web::Json(x)).ok_or(ApiError::SignUpNotFound);
 			} else {
-				sync_single_user(&user, &member, server_id).await.unwrap()
+				sync_single_user(&user, &member, server_id).await?
 			}));
 		}
 		Err(ApiError::UserNotFound)

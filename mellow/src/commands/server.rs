@@ -29,8 +29,7 @@ pub async fn setup(interaction: InteractionPayload) -> Result<SlashResponse> {
 						"owner_user_id": "{}"
 					}}"#, guild.name, user.user.id, guild.icon.unwrap_or("".into()), user.user.id))
 					.execute()
-					.await
-					.unwrap();
+					.await?;
 
 				edit_original_response(interaction.token, InteractionResponseData::ChannelMessageWithSource {
 					flags: Some(64),
