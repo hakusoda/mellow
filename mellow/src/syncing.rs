@@ -176,12 +176,12 @@ pub async fn sync_member(user: Option<&User>, member: &DiscordMember, server: &S
 	}
 
 	if !used_connections.is_empty() {
-		let connections = used_connections.clone();
+		let connection_ids: Vec<String> = used_connections.iter().map(|x| x.id.clone()).collect();
 		tokio::spawn(async move {
 			DATABASE
 				.from("mellow_user_server_connections")
 				.update(format!(r#"{{ "last_used_at": "{}" }}"#, chrono::Local::now()))
-				.in_("id", connections.iter().map(|x| x.id.clone()))
+				.in_("id", connection_ids)
 				.execute()
 				.await
 				.unwrap();
