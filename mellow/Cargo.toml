@@ -35,4 +35,5 @@ simple_logger = "4.3.0"
 tracing-error = "0.2.0"
 mellow_macros = { path = "../macros" }
 async-recursion = "1.0.5"
+twilight-model = "0.15.4"
 twilight-gateway = "0.15.4"

@@ -1,6 +1,8 @@
 use serde::{ Serialize, Deserialize };
+use reqwest::Method;
+
 use crate::{
-	fetch::{ get_json, post_json, patch_json },
+	fetch::{ get_json, post_json, fetch_json, patch_json },
 	interaction::{ Embed, InteractionResponseData },
 	Result
 };
@@ -45,6 +47,10 @@ impl Default for DiscordModifyMemberPayload {
 
 pub async fn modify_member(guild_id: String, user_id: String, payload: DiscordModifyMemberPayload) -> Result<()> {
 	patch_json(format!("https://discord.com/api/v10/guilds/{guild_id}/members/{user_id}"), payload).await
+}
+
+pub async fn remove_member(guild_id: impl Into<String>, user_id: impl Into<String>) -> Result<()> {
+	fetch_json(format!("https://discord.com/api/v10/guilds/{}/members/{}", guild_id.into(), user_id.into()), Some(Method::DELETE), None).await
 }
 
 #[derive(Serialize, Deserialize)]

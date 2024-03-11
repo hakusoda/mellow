@@ -1067,6 +1067,7 @@ dependencies = [
  "tracing",
  "tracing-error",
  "twilight-gateway",
+ "twilight-model",
 ]
 
 [[package]]

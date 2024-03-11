@@ -1,7 +1,13 @@
+use std::collections::HashMap;
 use simple_logger::SimpleLogger;
+use twilight_model::gateway::{
+	payload::outgoing::update_presence::UpdatePresencePayload,
+	presence::{ Status, Activity, ActivityType }
+};
 use twilight_gateway::{ Event, Shard, Intents, ShardId };
 
-use server::{ ServerLog, ProfileSyncKind };
+use server::event::start_event_response;
+use database::get_server_event_response_tree;
 use interaction::InteractionPayload;
 
 mod http;
@@ -56,7 +62,27 @@ async fn main() -> std::io::Result<()> {
 		.unwrap();
 
 	tokio::spawn(async {
-		let mut shard = Shard::new(ShardId::ONE, env!("DISCORD_TOKEN").to_string(), Intents::GUILD_MEMBERS);
+		let config = twilight_gateway::Config::builder(env!("DISCORD_TOKEN").to_string(), Intents::GUILD_MEMBERS)
+			.presence(UpdatePresencePayload::new(vec![Activity {
+				id: None,
+				url: None,
+				name: "burgers".into(),
+				kind: ActivityType::Custom,
+				emoji: None,
+				flags: None,
+				party: None,
+				state: Some("now here's the syncer".into()),
+				assets: None,
+				buttons: vec![],
+				details: None,
+				secrets: None,
+				instance: None,
+				created_at: None,
+				timestamps: None,
+				application_id: None
+			}.into()], false, None, Status::Online).unwrap())
+			.build();
+		let mut shard = Shard::with_config(ShardId::ONE, config);
 		loop {
 			let event = match shard.next_event().await {
 				Ok(event) => event,
@@ -74,18 +100,19 @@ async fn main() -> std::io::Result<()> {
 				Event::MemberAdd(data) => {
 					let user_id = data.user.id.to_string();
 					let server_id = data.guild_id.to_string();
-					if let Some(user) = database::get_users_by_discord(vec![user_id.clone()], &server_id).await.into_iter().next() {
-						let member = discord::get_member(&server_id, &user_id).await.unwrap();
-						let result = syncing::sync_single_user(&user, &member, server_id).await.unwrap();
-						if result.profile_changed {
-							result.server.send_logs(vec![ServerLog::ServerProfileSync {
-								kind: ProfileSyncKind::NewMember,
-								member,
-								forced_by: None,
-								role_changes: result.role_changes.clone(),
-								nickname_change: result.nickname_change.clone(),
-								relevant_connections: result.relevant_connections.clone()
-							}]).await.unwrap();
+					let response_tree = get_server_event_response_tree(&server_id, "member_join").await.unwrap();
+					if !response_tree.is_empty() {
+						if let Some(user) = database::get_users_by_discord(vec![user_id.clone()], &server_id).await.into_iter().next() {
+							let member = discord::get_member(&server_id, &user_id).await.unwrap();
+							start_event_response(&response_tree, &HashMap::from([
+								("globals".into(), serde_json::json!({
+									"member": {
+										"id": member.id(),
+										"username": member.user.username,
+										"display_name": member.display_name()
+									}
+								}))
+							]), &server_id, Some(&user), Some(&member)).await;
 						}
 					}
 				},

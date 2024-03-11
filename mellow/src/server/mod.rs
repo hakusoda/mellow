@@ -9,6 +9,8 @@ use crate::{
 	Result
 };
 
+pub mod event;
+
 pub enum ProfileSyncKind {
 	Default,
 	NewMember

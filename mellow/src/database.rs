@@ -2,6 +2,10 @@ use serde::{ Serialize, Deserialize };
 use once_cell::sync::Lazy;
 use postgrest::Postgrest;
 use serde_repr::*;
+use crate::{
+	server::event::EventResponseItem,
+	Result
+};
 
 pub const DATABASE: Lazy<Postgrest> = Lazy::new(|| {
 	let key = env!("SUPABASE_API_KEY");
@@ -159,6 +163,20 @@ pub async fn get_server(id: impl Into<String>) -> Server {
 		.await
 		.unwrap()
 	).unwrap()
+}
+
+pub async fn get_server_event_response_tree(server_id: impl Into<String>, tree_name: impl Into<String>) -> Result<Vec<EventResponseItem>> {
+	let value: serde_json::Value =serde_json::from_str(&DATABASE.from("mellow_servers")
+		.select(format!("items:{}_event_response_tree", tree_name.into()))
+		.eq("id", server_id.into())
+		.limit(1)
+		.single()
+		.execute()
+		.await?
+		.text()
+		.await?
+	)?;
+	Ok(serde_json::from_value(value.get("items").unwrap().clone())?)
 }
 
 pub async fn server_exists(id: impl Into<String>) -> bool {
