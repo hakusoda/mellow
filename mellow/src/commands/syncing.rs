@@ -5,7 +5,7 @@ use crate::{
 	server::{ ServerLog, ProfileSyncKind },
 	discord::{ DiscordMember, get_members, edit_original_response },
 	syncing::{ RoleChangeKind, SyncMemberResult, sync_member, create_sign_up, get_connection_metadata, sync_single_user },
-	database::{ UserResponse, get_server, get_users_by_discord },
+	database::{ UserResponse, get_server, get_user_by_discord, get_users_by_discord },
 	interaction::{ Embed, EmbedField, InteractionPayload, InteractionResponseData },
 	Result, SlashResponse
 };
@@ -72,12 +72,11 @@ pub async fn sync_with_token(user: UserResponse, member: DiscordMember, guild_id
 pub async fn sync(interaction: InteractionPayload) -> Result<SlashResponse> {
 	let guild_id = interaction.guild_id.clone().unwrap();
 	let member = interaction.member.unwrap();
-	if let Some(user) = get_users_by_discord(vec![member.id()], guild_id.clone()).await.into_iter().next() {
-		SlashResponse::defer(interaction.token.clone(), Box::pin(async move {
+	if let Some(user) = get_user_by_discord(member.id(), &guild_id).await? {
+		return Ok(SlashResponse::defer(interaction.token.clone(), Box::pin(async move {
 			sync_with_token(user, member, &guild_id, &interaction.token).await?;
 			Ok(())
-		}));
-		return Ok(SlashResponse::DeferMessage);
+		})));
 	}
 
 	create_sign_up(member.id(), guild_id, interaction.token).await;
@@ -91,11 +90,12 @@ pub async fn sync(interaction: InteractionPayload) -> Result<SlashResponse> {
 pub async fn forcesyncall(interaction: InteractionPayload) -> Result<SlashResponse> {
 	Ok(SlashResponse::defer(interaction.token.clone(), Box::pin(async move {
 		let guild_id = interaction.guild_id.unwrap();
-		let server = get_server(&guild_id).await;
+		
+		let server = get_server(&guild_id).await?;
 		let members = get_members(&guild_id).await?;
-		let users = get_users_by_discord(members.iter().map(|x| x.id()).collect(), guild_id).await;
-
-		let metadata = get_connection_metadata(&users, &server).await;
+		
+		let users = get_users_by_discord(members.iter().map(|x| x.id()).collect(), guild_id).await?;
+		let metadata = get_connection_metadata(&users, &server).await?;
 
 		let mut logs: Vec<ServerLog> = vec![];
 		let mut total_synced = 0;
@@ -128,9 +128,7 @@ pub async fn forcesyncall(interaction: InteractionPayload) -> Result<SlashRespon
 			content: Some(format!("## Successfully synced {total_synced} profiles\n{total_changed} profile(s) in total were updated."))
 		}).await?;
 
-		if !logs.is_empty() {
-			server.send_logs(logs).await?;
-		}
+		server.send_logs(logs).await?;
 		Ok(())
 	})))
 }

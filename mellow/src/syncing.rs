@@ -50,7 +50,7 @@ pub struct ConnectionMetadata {
 	pub roblox_memberships: Vec<RobloxMembership>
 }
 
-pub async fn get_connection_metadata(users: &[UserResponse], server: &Server) -> ConnectionMetadata {
+pub async fn get_connection_metadata(users: &[UserResponse], server: &Server) -> Result<ConnectionMetadata> {
 	let mut roblox_memberships: Vec<RobloxMembership> = vec![];
 	let mut group_ids: Vec<String> = vec![];
 	for action in server.actions.iter() {
@@ -73,7 +73,7 @@ pub async fn get_connection_metadata(users: &[UserResponse], server: &Server) ->
 		//let roblox_ids: Vec<String> = users.iter().flat_map(|x| x.user.connections.iter().filter(|x| matches!(x.connection.kind, UserConnectionKind::Roblox)).map(|x| format!("users/{}", x.connection.sub)).collect::<Vec<String>>()).collect();
 		//let items = get_group_memberships("-", Some(format!("user in ['{}']", roblox_ids.join("','")))).await;
 		for id in users.iter().flat_map(|x| x.user.connections.iter().filter(|x| matches!(x.connection.kind, UserConnectionKind::Roblox)).map(|x| x.connection.sub.clone()).collect::<Vec<String>>()) {
-			let roles = get_user_group_roles(&id).await;
+			let roles = get_user_group_roles(&id).await?;
 			for role in roles {
 				roblox_memberships.push(RobloxMembership {
 					role: role.role.id,
@@ -85,9 +85,9 @@ pub async fn get_connection_metadata(users: &[UserResponse], server: &Server) ->
 		}
 	}
 
-	ConnectionMetadata {
+	Ok(ConnectionMetadata {
 		roblox_memberships
-	}
+	})
 }
 
 async fn get_role_name(id: String, guild_id: impl Into<String>, roles: &mut Option<Vec<DiscordRole>>) -> Result<String> {
@@ -102,8 +102,8 @@ async fn get_role_name(id: String, guild_id: impl Into<String>, roles: &mut Opti
 }
 
 pub async fn sync_single_user(user: &UserResponse, member: &DiscordMember, guild_id: impl Into<String>) -> Result<SyncMemberResult> {
-	let server = get_server(guild_id).await;
-	let metadata = get_connection_metadata(&vec![user.clone()], &server).await;
+	let server = get_server(guild_id).await?;
+	let metadata = get_connection_metadata(&vec![user.clone()], &server).await?;
 	sync_member(Some(&user.user), &member, &server, &metadata, &mut None).await
 }
 

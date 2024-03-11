@@ -3,7 +3,7 @@ use mellow_macros::command;
 use crate::{
 	Result,
 	discord::{ get_guild, edit_original_response },
-	database::{ DATABASE, server_exists, get_users_by_discord },
+	database::{ DATABASE, server_exists, get_user_by_discord },
 	interaction::{ InteractionPayload, InteractionResponseData },
 	SlashResponse
 };
@@ -11,13 +11,13 @@ use crate::{
 #[command(no_dm, description = "Connect this server to mellow.", default_member_permissions = "0")]
 pub async fn setup(interaction: InteractionPayload) -> Result<SlashResponse> {
 	let guild_id = interaction.guild_id.unwrap();
-	Ok(if server_exists(&guild_id).await {
+	Ok(if server_exists(&guild_id).await? {
 		SlashResponse::Message {
 			flags: Some(64),
 			content: Some(format!("## Server already connected\nThis server is already connected to mellow, view it [here](https://hakumi.cafe/mellow/server/{guild_id})."))
 		}
 	} else {
-		if let Some(user) = get_users_by_discord(vec![interaction.member.unwrap().id()], guild_id.clone()).await.into_iter().next() {
+		if let Some(user) = get_user_by_discord(interaction.member.unwrap().id(), guild_id.clone()).await? {
 			SlashResponse::defer(interaction.token.clone(), Box::pin(async move {
 				let guild = get_guild(&guild_id).await.unwrap();
 				DATABASE.from("mellow_servers")

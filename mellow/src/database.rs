@@ -62,13 +62,17 @@ pub struct UserResponse {
 	pub user: User
 }
 
-pub async fn get_users_by_discord(ids: Vec<String>, server_id: impl Into<String>) -> Vec<UserResponse> {
-	serde_json::from_str(&DATABASE.from("user_connections")
+pub async fn get_user_by_discord(id: impl Into<String>, server_id: impl Into<String>) -> Result<Option<UserResponse>> {
+	Ok(get_users_by_discord(vec![id.into()], server_id).await?.into_iter().next())
+}
+
+pub async fn get_users_by_discord(ids: Vec<String>, server_id: impl Into<String>) -> Result<Vec<UserResponse>> {
+	Ok(serde_json::from_str(&DATABASE.from("user_connections")
 		.select("sub,user:users(id,connections:mellow_user_server_connections(id,connection:user_connections(sub,type,username,display_name)))")
 		.in_("sub", ids)
 		.eq("users.mellow_user_server_connections.server_id", server_id.into())
-		.execute().await.unwrap().text().await.unwrap()
-	).unwrap()
+		.execute().await?.text().await?
+	)?)
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -150,23 +154,21 @@ pub enum ProfileSyncActionRequirementsKind {
 	MeetOne
 }
 
-pub async fn get_server(id: impl Into<String>) -> Server {
-	serde_json::from_str(&DATABASE.from("mellow_servers")
+pub async fn get_server(id: impl Into<String>) -> Result<Server> {
+	Ok(serde_json::from_str(&DATABASE.from("mellow_servers")
 		.select("id,default_nickname,allow_forced_syncing,logging_types,logging_channel_id,actions:mellow_binds(id,name,type,metadata,requirements_type,requirements:mellow_bind_requirements(id,type,data))")
 		.eq("id", id.into())
 		.limit(1)
 		.single()
 		.execute()
-		.await
-		.unwrap()
+		.await?
 		.text()
-		.await
-		.unwrap()
-	).unwrap()
+		.await?
+	)?)
 }
 
 pub async fn get_server_event_response_tree(server_id: impl Into<String>, tree_name: impl Into<String>) -> Result<Vec<EventResponseItem>> {
-	let value: serde_json::Value =serde_json::from_str(&DATABASE.from("mellow_servers")
+	let value: serde_json::Value = serde_json::from_str(&DATABASE.from("mellow_servers")
 		.select(format!("items:{}_event_response_tree", tree_name.into()))
 		.eq("id", server_id.into())
 		.limit(1)
@@ -179,16 +181,16 @@ pub async fn get_server_event_response_tree(server_id: impl Into<String>, tree_n
 	Ok(serde_json::from_value(value.get("items").unwrap().clone())?)
 }
 
-pub async fn server_exists(id: impl Into<String>) -> bool {
+pub async fn server_exists(id: impl Into<String>) -> Result<bool> {
 	// this isn't an ideal method, but this rust library is way too limited, especially when compared to postgrest-js...
-	DATABASE.from("mellow_servers")
+	Ok(DATABASE.from("mellow_servers")
 		.select("id")
 		.eq("id", id.into())
 		.limit(1)
 		.single()
 		.execute()
-		.await
-		.unwrap()
+		.await?
 		.status()
 		.is_success()
+	)
 }

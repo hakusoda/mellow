@@ -2,6 +2,8 @@ use serde::Deserialize;
 use reqwest::{ header, Client };
 use once_cell::sync::Lazy;
 
+use crate::Result;
+
 const CLIENT: Lazy<Client> = Lazy::new(||
 	Client::builder()
 		.default_headers({
@@ -66,13 +68,12 @@ pub struct UserGroupRolesResponse {
 	data: Vec<UserGroupRole>
 }
 
-pub async fn get_user_group_roles(user_id: impl Into<String>) -> Vec<UserGroupRole> {
-	CLIENT.get(format!("https://groups.roblox.com/v2/users/{}/groups/roles", user_id.into()))
+pub async fn get_user_group_roles(user_id: impl Into<String>) -> Result<Vec<UserGroupRole>> {
+	Ok(CLIENT.get(format!("https://groups.roblox.com/v2/users/{}/groups/roles", user_id.into()))
 		.send()
-		.await
-		.unwrap()
+		.await?
 		.json::<UserGroupRolesResponse>()
-		.await
-		.unwrap()
+		.await?
 		.data
+	)
 }

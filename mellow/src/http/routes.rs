@@ -77,7 +77,7 @@ async fn sync_member(request: HttpRequest, body: web::Json<SyncMemberPayload>, p
 	// TODO: make this... easier on the eyes.
 	if request.headers().get("x-api-key").map_or(false, |x| x.to_str().unwrap() == API_KEY.to_string()) {
 		let (server_id, user_id) = path.into_inner();
-		if let Some(user) = database::get_users_by_discord(vec![user_id.clone()], server_id.clone()).await.into_iter().next() {
+		if let Some(user) = database::get_user_by_discord(&user_id, &server_id).await? {
 			let member = get_member(&server_id, &user_id).await.unwrap();
 			return Ok(web::Json(if let Some(token) = &body.webhook_token {
 				crate::commands::syncing::sync_with_token(user, member, &server_id, &token).await?
@@ -125,7 +125,7 @@ async fn action_log_webhook(request: HttpRequest, body: String) -> ApiResult<Htt
 		.map_err(|_| ApiError::GenericInvalidRequest)?;
 
 	database::get_server(&payload.server_id)
-		.await
+		.await?
 		.send_logs(vec![ServerLog::ActionLog(payload)])
 		.await?;
 

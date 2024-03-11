@@ -46,6 +46,10 @@ impl ServerLog {
 
 impl Server {
 	pub async fn send_logs(&self, logs: Vec<ServerLog>) -> Result<()> {
+		if logs.is_empty() {
+			return Ok(());
+		}
+		
 		if let Some(channel_id) = &self.logging_channel_id {
 			let mut embeds: Vec<Embed> = vec![];
 			for log in logs {

@@ -102,7 +102,7 @@ async fn main() -> std::io::Result<()> {
 					let server_id = data.guild_id.to_string();
 					let response_tree = get_server_event_response_tree(&server_id, "member_join").await.unwrap();
 					if !response_tree.is_empty() {
-						if let Some(user) = database::get_users_by_discord(vec![user_id.clone()], &server_id).await.into_iter().next() {
+						if let Some(user) = database::get_user_by_discord(&user_id, &server_id).await.unwrap() {
 							let member = discord::get_member(&server_id, &user_id).await.unwrap();
 							start_event_response(&response_tree, &HashMap::from([
 								("globals".into(), serde_json::json!({
