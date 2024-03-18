@@ -42,15 +42,15 @@ pub async fn sync_with_token(user: UserResponse, member: DiscordMember, guild_id
 				..Default::default()
 			}
 		]) } else { None },
-		content: Some(format!("{}{}", if result.profile_changed {
-			format!("## Server Profile has been updated.\n{}",
+		content: Some(format!("{}{}\n\n[<:personbadge:1219233857786875925>  Change Connections](https://hakumi.cafe/mellow/server/{}/onboarding)  • [<:personraisedhand:1219234152709095424> Get Support](https://discord.com/invite/rs3r4dQu9P)", if result.profile_changed {
+			format!("## <:check2circle:1219235152580837419>  Server Profile has been updated.\n{}",
 				if result.role_changes.is_empty() { "" } else { "Your roles have been updated." }
 			)
 		} else {
-			"## Server Profile is up-to-date.\nYour server profile is already up-to-date, no adjustments have been made.\n\nIf you were expecting a different result, you may need to wait a few minutes.".into()
+			"## <:check2circle:1219235152580837419>  Server Profile is up-to-date.\nYour server profile is already up-to-date, no adjustments have been made.\nIf you were expecting a different result, you may need to wait a few minutes.".into()
 		}, if result.server.actions.iter().all(|x| x.requirements.iter().all(|e| e.relevant_connection().map_or(true, |x| user.user.connections.iter().any(|e| x == e.connection.kind)))) { "".to_string() } else {
 			format!("\n\n### You're missing connections\nYou haven't given this server access to all connections yet, change that [here](https://hakumi.cafe/mellow/server/{guild_id}/onboarding)!")
-		}))
+		}, guild_id))
 	}).await?;
 
 	if result.profile_changed {
