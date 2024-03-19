@@ -25,7 +25,9 @@ pub struct User {
 pub enum UserConnectionKind {
 	Discord,
 	GitHub,
-	Roblox
+	Roblox,
+	YouTube,
+	Patreon
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -34,7 +36,16 @@ pub struct UserConnection {
 	#[serde(rename = "type")]
 	pub kind: UserConnectionKind,
 	pub username: Option<String>,
-	pub display_name: Option<String>
+	pub display_name: Option<String>,
+	pub oauth_authorisations: Option<Vec<UserConnectionOAuthAuthorisation>>
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct UserConnectionOAuthAuthorisation {
+	pub token_type: String,
+	pub expires_at: chrono::DateTime<chrono::Utc>,
+	pub access_token: String,
+	pub refresh_token: String
 }
 
 impl UserConnection {
@@ -45,7 +56,9 @@ impl UserConnection {
 		match self.kind {
 			UserConnectionKind::Discord => format!("<:discord:1137058089980416080> Discord — [{name}](https://discord.com/users/{sub})"),
 			UserConnectionKind::GitHub => format!("<:github:1143983126792642661> GitHub — [{name}](https://github.com/{username})"),
-			UserConnectionKind::Roblox => format!("<:roblox:1175038688271536169> Roblox — [{name}](https://www.roblox.com/users/{sub})")
+			UserConnectionKind::Roblox => format!("<:roblox:1175038688271536169> Roblox — [{name}](https://www.roblox.com/users/{sub})"),
+			UserConnectionKind::YouTube => "placeholder".into(),
+			UserConnectionKind::Patreon => format!("<:Patreon:1219706758742933586> Patreon — [{name}](https://www.patreon.com/user?u={sub})"),
 		}
 	}
 }
@@ -68,7 +81,7 @@ pub async fn get_user_by_discord(id: impl Into<String>, server_id: impl Into<Str
 
 pub async fn get_users_by_discord(ids: Vec<String>, server_id: impl Into<String>) -> Result<Vec<UserResponse>> {
 	Ok(serde_json::from_str(&DATABASE.from("user_connections")
-		.select("sub,user:users(id,connections:mellow_user_server_connections(id,connection:user_connections(sub,type,username,display_name)))")
+		.select("sub,user:users(id,connections:mellow_user_server_connections(id,connection:user_connections(sub,type,username,display_name,oauth_authorisations:user_connection_oauth_authorisations(token_type,expires_at,access_token,refresh_token))))")
 		.in_("sub", ids)
 		.eq("users.mellow_user_server_connections.server_id", server_id.into())
 		.execute().await?.text().await?
@@ -144,7 +157,8 @@ pub enum ProfileSyncActionRequirementKind {
 	RobloxHaveAsset,
 	RobloxHaveBadge,
 	RobloxHavePass,
-	GitHubInOrganisation
+	GitHubInOrganisation,
+	PatreonHaveCampaignTier
 }
 
 #[derive(Clone, Debug, Deserialize_repr, Serialize_repr)]

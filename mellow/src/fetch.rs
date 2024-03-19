@@ -21,11 +21,14 @@ pub const CLIENT: Lazy<Client> = Lazy::new(||
 );
 
 #[tracing::instrument]
-pub async fn fetch_json<U: IntoUrl + Debug, T: DeserializeOwned>(url: U, method: Option<Method>, body: Option<serde_json::Value>) -> Result<T> {
+pub async fn fetch_json<U: IntoUrl + Debug, T: DeserializeOwned>(url: U, method: Option<Method>, body: Option<serde_json::Value>, headers: Option<HeaderMap>) -> Result<T> {
 	let url = url.into_url()?;
 	let mut builder = CLIENT.request(method.unwrap_or(Method::GET), url.clone());
 	if let Some(body) = body {
 		builder = builder.json(&body);
+	}
+	if let Some(headers) = headers {
+		builder = builder.headers(headers);
 	}
 
 	match builder.send().await {
@@ -44,14 +47,14 @@ pub async fn fetch_json<U: IntoUrl + Debug, T: DeserializeOwned>(url: U, method:
 	}
 }
 
-pub async fn get_json<U: IntoUrl + Debug, T: DeserializeOwned>(url: U) -> Result<T> {
-	fetch_json(url, Some(Method::GET), None).await
+pub async fn get_json<U: IntoUrl + Debug, T: DeserializeOwned>(url: U, headers: Option<HeaderMap>) -> Result<T> {
+	fetch_json(url, Some(Method::GET), None, headers).await
 }
 
 pub async fn post_json<U: IntoUrl + Debug, T: DeserializeOwned, B: Serialize>(url: U, body: B) -> Result<T> {
-	fetch_json(url, Some(Method::POST), Some(serde_json::to_value(body)?)).await
+	fetch_json(url, Some(Method::POST), Some(serde_json::to_value(body)?), None).await
 }
 
 pub async fn patch_json<U: IntoUrl + Debug, T: DeserializeOwned, B: Serialize>(url: U, body: B) -> Result<T> {
-	fetch_json(url, Some(Method::PATCH), Some(serde_json::to_value(body)?)).await
+	fetch_json(url, Some(Method::PATCH), Some(serde_json::to_value(body)?), None).await
 }

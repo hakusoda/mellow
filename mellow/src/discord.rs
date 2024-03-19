@@ -50,7 +50,7 @@ pub async fn modify_member(guild_id: String, user_id: String, payload: DiscordMo
 }
 
 pub async fn remove_member(guild_id: impl Into<String>, user_id: impl Into<String>) -> Result<()> {
-	fetch_json(format!("https://discord.com/api/v10/guilds/{}/members/{}", guild_id.into(), user_id.into()), Some(Method::DELETE), None).await
+	fetch_json(format!("https://discord.com/api/v10/guilds/{}/members/{}", guild_id.into(), user_id.into()), Some(Method::DELETE), None, None).await
 }
 
 #[derive(Serialize, Deserialize)]
@@ -79,7 +79,7 @@ pub struct DiscordGuild {
 }
 
 pub async fn get_guild(guild_id: impl Into<String>) -> Result<DiscordGuild> {
-	get_json(format!("https://discord.com/api/v10/guilds/{}", guild_id.into())).await
+	get_json(format!("https://discord.com/api/v10/guilds/{}", guild_id.into()), None).await
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -124,11 +124,11 @@ impl DiscordMember {
 }
 
 pub async fn get_member(guild_id: impl Into<String>, user_id: impl Into<String>) -> Result<DiscordMember> {
-	get_json(format!("https://discord.com/api/v10/guilds/{}/members/{}", guild_id.into(), user_id.into())).await
+	get_json(format!("https://discord.com/api/v10/guilds/{}/members/{}", guild_id.into(), user_id.into()), None).await
 }
 
 pub async fn get_members(guild_id: impl Into<String>) -> Result<Vec<DiscordMember>> {
-	get_json(format!("https://discord.com/api/v10/guilds/{}/members?limit=100", guild_id.into())).await
+	get_json(format!("https://discord.com/api/v10/guilds/{}/members?limit=100", guild_id.into()), None).await
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -147,5 +147,5 @@ pub struct DiscordRole {
 }
 
 pub async fn get_guild_roles(guild_id: impl Into<String>) -> Result<Vec<DiscordRole>> {
-	get_json(format!("https://discord.com/api/v10/guilds/{}/roles", guild_id.into())).await
+	get_json(format!("https://discord.com/api/v10/guilds/{}/roles", guild_id.into()), None).await
 }

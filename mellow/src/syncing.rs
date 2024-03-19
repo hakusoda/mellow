@@ -5,10 +5,8 @@ use tokio::sync::RwLock;
 use async_recursion::async_recursion;
 
 use crate::{
-	roblox::get_user_group_roles,
-	discord::{ DiscordRole, DiscordMember, DiscordModifyMemberPayload, modify_member, get_guild_roles },
-	database::{ User, Server, UserResponse, UserConnection, ProfileSyncAction, UserConnectionKind, UserServerConnection, ProfileSyncActionKind, ProfileSyncActionRequirementKind, ProfileSyncActionRequirementsKind, DATABASE, get_server },
-	Result
+	patreon::EnumToBeNamed,
+	database::{ get_server, ProfileSyncAction, ProfileSyncActionKind, ProfileSyncActionRequirementKind, ProfileSyncActionRequirementsKind, Server, User, UserConnection, UserConnectionKind, UserResponse, UserServerConnection, DATABASE }, discord::{ get_guild_roles, modify_member, DiscordMember, DiscordModifyMemberPayload, DiscordRole }, roblox::get_user_group_roles, Result
 };
 
 #[derive(Debug, Serialize)]
@@ -38,6 +36,15 @@ pub enum RoleChangeKind {
 pub struct NicknameChange(pub Option<String>, pub Option<String>);
 
 #[derive(Debug)]
+pub struct PatreonPledge {
+	pub id: String,
+	pub tiers: Vec<String>,
+	pub active: bool,
+	pub user_id: String,
+	pub campaign_id: String
+}
+
+#[derive(Debug)]
 pub struct RobloxMembership {
 	pub rank: u8,
 	pub role: u128,
@@ -47,10 +54,12 @@ pub struct RobloxMembership {
 
 #[derive(Debug)]
 pub struct ConnectionMetadata {
+	pub patreon_pledges: Vec<PatreonPledge>,
 	pub roblox_memberships: Vec<RobloxMembership>
 }
 
 pub async fn get_connection_metadata(users: &[UserResponse], server: &Server) -> Result<ConnectionMetadata> {
+	let mut patreon_pledges: Vec<PatreonPledge> = vec![];
 	let mut roblox_memberships: Vec<RobloxMembership> = vec![];
 	let mut group_ids: Vec<String> = vec![];
 	for action in server.actions.iter() {
@@ -62,6 +71,27 @@ pub async fn get_connection_metadata(users: &[UserResponse], server: &Server) ->
 					let id = requirement.data.first().unwrap();
 					if !group_ids.contains(&id) {
 						group_ids.push(id.clone());
+					}
+				},
+				ProfileSyncActionRequirementKind::PatreonHaveCampaignTier => {
+					for user in users.iter() {
+						if let Some(connection) = user.user.connections.iter().find(|x| matches!(x.connection.kind, UserConnectionKind::Patreon)) {
+							let data = crate::patreon::get_user_memberships(&connection.connection.oauth_authorisations.as_ref().unwrap()[0]).await?;
+							if let Some(included) = data.included {
+								for membership in included {
+									match membership {
+										EnumToBeNamed::Member(member) => patreon_pledges.push(PatreonPledge {
+											id: member.id,
+											tiers: member.relationships.currently_entitled_tiers.data.0.iter().map(|x| x.id.clone()).collect(),
+											active: member.attributes.patron_status == "active_patron",
+											user_id: user.user.id.clone(),
+											campaign_id: member.relationships.campaign.data.id
+										}),
+										_ => ()
+									}
+								}
+							}
+						}
 					}
 				},
 				_ => {}
@@ -86,6 +116,7 @@ pub async fn get_connection_metadata(users: &[UserResponse], server: &Server) ->
 	}
 
 	Ok(ConnectionMetadata {
+		patreon_pledges,
 		roblox_memberships
 	})
 }
@@ -242,6 +273,11 @@ pub async fn member_meets_action_requirements(
 				if let Some(action2) = all_actions.iter().find(|x| x.id == *target_id) {
 					member_meets_action_requirements(user, action2, &all_actions, &connection_metadata, cache, used_connections).await
 				} else { false }
+			},
+			ProfileSyncActionRequirementKind::PatreonHaveCampaignTier => {
+				let campaign_id = &item.data[0];
+				let tier_id = &item.data[1];
+				user.map_or(false, |user| connection_metadata.patreon_pledges.iter().find(|x| x.user_id == user.id && x.campaign_id == *campaign_id && x.tiers.contains(tier_id)).is_some())
 			},
 			_ => false
 		} {

@@ -130,7 +130,7 @@ pub async fn handle_request(body: String) -> ApiResult<Json<InteractionResponse>
 			if let Some(ref data) = payload.data {
 				if let Some(command) = COMMANDS.iter().find(|x| x.name == data.name) {
 					if let Some(callback) = command.slash_action {
-						return Ok(Json(match callback(payload).await? {
+						return Ok(Json(match callback(payload).await.map_err(|x| { println!("{x}"); x })? {
 							SlashResponse::Message { flags, content } =>
 								InteractionResponse {
 									kind: InteractionResponseKind::ChannelMessageWithSource,

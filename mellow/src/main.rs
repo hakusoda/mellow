@@ -17,6 +17,7 @@ mod roblox;
 mod server;
 mod discord;
 mod syncing;
+mod patreon;
 mod commands;
 mod database;
 mod interaction;
@@ -128,3 +129,16 @@ pub type BoxFuture<'a, T> = std::pin::Pin<Box<dyn std::future::Future<Output = T
 
 pub use error::Result;
 use tracing_error::InstrumentError;
+
+#[macro_export]
+macro_rules! cast {
+	($target: expr, $pat: path) => {
+		{
+			if let $pat(a) = $target {
+				a
+			} else {
+				panic!("mismatch variant when cast to {}", stringify!($pat));
+			}
+		}
+	};
+}
