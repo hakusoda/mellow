@@ -41,7 +41,8 @@ pub struct PatreonPledge {
 	pub tiers: Vec<String>,
 	pub active: bool,
 	pub user_id: String,
-	pub campaign_id: String
+	pub campaign_id: String,
+	pub connection_id: String
 }
 
 #[derive(Debug)]
@@ -85,7 +86,8 @@ pub async fn get_connection_metadata(users: &[UserResponse], server: &Server) ->
 											tiers: member.relationships.currently_entitled_tiers.data.0.iter().map(|x| x.id.clone()).collect(),
 											active: member.attributes.patron_status == "active_patron",
 											user_id: user.user.id.clone(),
-											campaign_id: member.relationships.campaign.data.id
+											campaign_id: member.relationships.campaign.data.id,
+											connection_id: connection.connection.id.clone()
 										}),
 										_ => ()
 									}
@@ -277,7 +279,16 @@ pub async fn member_meets_action_requirements(
 			ProfileSyncActionRequirementKind::PatreonHaveCampaignTier => {
 				let campaign_id = &item.data[0];
 				let tier_id = &item.data[1];
-				user.map_or(false, |user| connection_metadata.patreon_pledges.iter().find(|x| x.user_id == user.id && x.campaign_id == *campaign_id && x.tiers.contains(tier_id)).is_some())
+				if let Some(user) = user {
+					if let Some(pledge) = connection_metadata.patreon_pledges.iter().find(|x| x.active && x.user_id == user.id && x.campaign_id == *campaign_id && x.tiers.contains(tier_id)) {
+						if let Some(connection) = user.connections.iter().find(|x| x.connection.id == pledge.connection_id).cloned() {
+							if !used_connections.contains(&connection) {
+								used_connections.push(connection);
+							}
+						}
+						true
+					} else { false }
+				} else { false }
 			},
 			_ => false
 		} {

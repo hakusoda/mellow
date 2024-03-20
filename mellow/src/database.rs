@@ -32,6 +32,7 @@ pub enum UserConnectionKind {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct UserConnection {
+	pub id: String,
 	pub sub: String,
 	#[serde(rename = "type")]
 	pub kind: UserConnectionKind,
@@ -81,7 +82,7 @@ pub async fn get_user_by_discord(id: impl Into<String>, server_id: impl Into<Str
 
 pub async fn get_users_by_discord(ids: Vec<String>, server_id: impl Into<String>) -> Result<Vec<UserResponse>> {
 	Ok(serde_json::from_str(&DATABASE.from("user_connections")
-		.select("sub,user:users(id,connections:mellow_user_server_connections(id,connection:user_connections(sub,type,username,display_name,oauth_authorisations:user_connection_oauth_authorisations(token_type,expires_at,access_token,refresh_token))))")
+		.select("sub,user:users(id,connections:mellow_user_server_connections(id,connection:user_connections(id,sub,type,username,display_name,oauth_authorisations:user_connection_oauth_authorisations(token_type,expires_at,access_token,refresh_token))))")
 		.in_("sub", ids)
 		.eq("users.mellow_user_server_connections.server_id", server_id.into())
 		.execute().await?.text().await?
