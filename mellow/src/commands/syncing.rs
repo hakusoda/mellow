@@ -11,7 +11,7 @@ use crate::{
 };
 
 pub async fn sync_with_token(user: UserResponse, member: DiscordMember, guild_id: &String, interaction_token: &String) -> Result<SyncMemberResult> {
-	let result = sync_single_user(&user, &member, guild_id).await?;
+	let result = sync_single_user(&user, &member, guild_id, None).await?;
 	let mut fields = vec![];
 	if let Some(changes) = &result.nickname_change {
 		fields.push(EmbedField {

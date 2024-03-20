@@ -13,7 +13,7 @@ use crate::{
 	fetch,
 	server::ServerLog,
 	discord::{ APP_ID, get_member },
-	syncing::{ SyncMemberResult, SIGN_UPS, sync_single_user },
+	syncing::{ PatreonPledge, SyncMemberResult, ConnectionMetadata, SIGN_UPS, sync_single_user },
 	database,
 	commands::COMMANDS,
 	interaction,
@@ -38,6 +38,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 		.service(interactions)
 		.service(sync_member)
 		.service(update_discord_commands)
+		.service(patreon_webhook)
 		.service(
 			web::scope("/absolutesolver")
 				.service(action_log_webhook)
@@ -89,7 +90,7 @@ async fn sync_member(request: HttpRequest, body: web::Json<SyncMemberPayload>, p
 
 				return result.map(|x| web::Json(x)).ok_or(ApiError::SignUpNotFound);
 			} else {
-				sync_single_user(&user, &member, server_id).await?
+				sync_single_user(&user, &member, server_id, None).await?
 			}));
 		}
 		Err(ApiError::UserNotFound)
@@ -128,6 +129,65 @@ async fn action_log_webhook(request: HttpRequest, body: String) -> ApiResult<Htt
 		.await?
 		.send_logs(vec![ServerLog::ActionLog(payload)])
 		.await?;
+
+	Ok(HttpResponse::Ok().finish())
+}
+
+#[derive(Deserialize)]
+struct PayloadData<T> {
+	data: T
+}
+
+#[derive(Deserialize)]
+struct WebhookPayload {
+	attributes: Attributes,
+	relationships: PayloadRelationships
+}
+
+#[derive(Deserialize)]
+struct Attributes {
+	patron_status: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct PayloadRelationships {
+	user: PayloadData<IdContainer>,
+	campaign: PayloadData<IdContainer>,
+	currently_entitled_tiers: PayloadData<Vec<IdContainer>>
+}
+
+#[derive(Deserialize)]
+struct IdContainer {
+	id: String
+}
+
+#[post("/patreon_webhook")]
+async fn patreon_webhook(body: String) -> ApiResult<HttpResponse> {
+	println!("{body}");
+	let payload: PayloadData<WebhookPayload> = serde_json::from_str(&body)
+		.map_err(|_| ApiError::GenericInvalidRequest)?;
+
+	let response: serde_json::Value = serde_json::from_str(&database::DATABASE.from("mellow_server_oauth_authorisations")
+		.select("server_id")
+		.eq("patreon_campaign_id", &payload.data.relationships.campaign.data.id)
+		.execute().await.unwrap().text().await.unwrap()
+	).map_err(|_| ApiError::GenericInvalidRequest)?;
+
+	let user_id = &payload.data.relationships.user.data.id;
+	let server_id = response.get("server_id").unwrap().as_str().unwrap();
+	if let Some(user) = database::get_user_by_discord(user_id, server_id).await? {
+		let member = get_member(server_id, user_id).await?;
+		sync_single_user(&user, &member, server_id, Some(ConnectionMetadata {
+			patreon_pledges: vec![PatreonPledge {
+				tiers: payload.data.relationships.currently_entitled_tiers.data.iter().map(|x| x.id.clone()).collect(),
+				active: payload.data.attributes.patron_status.map_or(false, |x| x == "active_patron"),
+				user_id: user.user.id.clone(),
+				campaign_id: payload.data.relationships.campaign.data.id.clone(),
+				connection_id: user.user.connections.iter().find(|x| matches!(x.connection.kind, database::UserConnectionKind::Patreon)).unwrap().connection.id.clone()
+			}],
+			roblox_memberships: vec![]
+		})).await?;
+	}
 
 	Ok(HttpResponse::Ok().finish())
 }

@@ -107,7 +107,7 @@ pub async fn start_event_response(items: &Vec<EventResponseItem>, variables: &Ha
 			},
 			EventResponseItem::SyncMemberProfile => {
 				if let Some((user, member)) = user.and_then(|x| member.map(|y| (x, y))) {
-					let result = syncing::sync_single_user(&user, &member, server_id).await.unwrap();
+					let result = syncing::sync_single_user(&user, &member, server_id, None).await.unwrap();
 					if result.profile_changed {
 						result.server.send_logs(vec![ServerLog::ServerProfileSync {
 							kind: ProfileSyncKind::NewMember,

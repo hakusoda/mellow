@@ -37,7 +37,6 @@ pub struct NicknameChange(pub Option<String>, pub Option<String>);
 
 #[derive(Debug)]
 pub struct PatreonPledge {
-	pub id: String,
 	pub tiers: Vec<String>,
 	pub active: bool,
 	pub user_id: String,
@@ -82,7 +81,6 @@ pub async fn get_connection_metadata(users: &[UserResponse], server: &Server) ->
 								for membership in included {
 									match membership {
 										EnumToBeNamed::Member(member) => patreon_pledges.push(PatreonPledge {
-											id: member.id,
 											tiers: member.relationships.currently_entitled_tiers.data.0.iter().map(|x| x.id.clone()).collect(),
 											active: member.attributes.patron_status == "active_patron",
 											user_id: user.user.id.clone(),
@@ -134,9 +132,12 @@ async fn get_role_name(id: String, guild_id: impl Into<String>, roles: &mut Opti
 	return Ok(items.iter().find(|x| x.id == id).map_or("unknown role".into(), |x| x.name.clone()));
 }
 
-pub async fn sync_single_user(user: &UserResponse, member: &DiscordMember, guild_id: impl Into<String>) -> Result<SyncMemberResult> {
+pub async fn sync_single_user(user: &UserResponse, member: &DiscordMember, guild_id: impl Into<String>, connection_metadata: Option<ConnectionMetadata>) -> Result<SyncMemberResult> {
 	let server = get_server(guild_id).await?;
-	let metadata = get_connection_metadata(&vec![user.clone()], &server).await?;
+	let metadata = match connection_metadata {
+		Some(x) => x,
+		None => get_connection_metadata(&vec![user.clone()], &server).await?
+	};
 	sync_member(Some(&user.user), &member, &server, &metadata, &mut None).await
 }
 
