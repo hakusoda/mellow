@@ -36,11 +36,7 @@ pub async fn fetch_json<U: IntoUrl + Debug, T: DeserializeOwned>(url: U, method:
 			Ok(if std::any::type_name::<T>() == std::any::type_name::<()>() {
 				serde_json::from_value(serde_json::Value::Null)?
 			} else {
-				//x.json().await.map_err(|x| crate::error::ErrorKind::FormattedHttpError(url.to_string(), x.to_string()))?
-				let text = x.text().await?;
-				println!("{text}");
-				
-				serde_json::from_str(&text)?
+				serde_json::from_str(&x.text().await?)?
 			})
 		},
 		Err(error) => Err(crate::error::ErrorKind::FormattedHttpError(url.to_string(), error.to_string()).into())

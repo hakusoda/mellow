@@ -82,7 +82,7 @@ pub async fn get_connection_metadata(users: &[UserResponse], server: &Server) ->
 									match membership {
 										EnumToBeNamed::Member(member) => patreon_pledges.push(PatreonPledge {
 											tiers: member.relationships.currently_entitled_tiers.data.0.iter().map(|x| x.id.clone()).collect(),
-											active: member.attributes.patron_status == "active_patron",
+											active: member.attributes.patron_status.is_some_and(|x| x == "active_patron"),
 											user_id: user.user.id.clone(),
 											campaign_id: member.relationships.campaign.data.id,
 											connection_id: connection.id.clone()

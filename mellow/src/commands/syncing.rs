@@ -10,6 +10,7 @@ use crate::{
 	Result, SlashResponse
 };
 
+#[tracing::instrument]
 pub async fn sync_with_token(user: UserResponse, member: DiscordMember, guild_id: &String, interaction_token: &String) -> Result<SyncMemberResult> {
 	let result = sync_single_user(&user, &member, guild_id, None).await?;
 	let mut fields = vec![];
@@ -68,6 +69,7 @@ pub async fn sync_with_token(user: UserResponse, member: DiscordMember, guild_id
 }
 
 // TODO: allow users to sync in dms via some sort of server selection
+#[tracing::instrument]
 #[command(no_dm, description = "Sync your server profile. (may contain traces of burgers)")]
 pub async fn sync(interaction: InteractionPayload) -> Result<SlashResponse> {
 	let guild_id = interaction.guild_id.clone().unwrap();
@@ -86,8 +88,10 @@ pub async fn sync(interaction: InteractionPayload) -> Result<SlashResponse> {
 	})
 }
 
+#[tracing::instrument]
 #[command(no_dm, description = "Forcefully sync every member in the server.", default_member_permissions = "0")]
 pub async fn forcesyncall(interaction: InteractionPayload) -> Result<SlashResponse> {
+	tracing::info!("hello everyone welcome to");
 	Ok(SlashResponse::defer(interaction.token.clone(), Box::pin(async move {
 		let guild_id = interaction.guild_id.unwrap();
 		

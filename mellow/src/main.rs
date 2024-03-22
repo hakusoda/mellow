@@ -46,7 +46,7 @@ impl SlashResponse {
 				discord::edit_original_response(interaction_token, interaction::InteractionResponseData::ChannelMessageWithSource {
 					flags: None,
 					embeds: None,
-					content: Some(error.in_current_span().to_string())
+					content: Some(format!("{error}\n{}", error.context))
 				}).await.unwrap();
 			}
 		});
@@ -128,7 +128,6 @@ async fn main() -> std::io::Result<()> {
 pub type BoxFuture<'a, T> = std::pin::Pin<Box<dyn std::future::Future<Output = T> + Send + 'a>>;
 
 pub use error::Result;
-use tracing_error::InstrumentError;
 
 #[macro_export]
 macro_rules! cast {

@@ -1,4 +1,4 @@
-use tracing_error::InstrumentError;
+use tracing_error::{ SpanTrace, InstrumentError };
 
 #[derive(Debug, thiserror::Error)]
 pub enum ErrorKind {
@@ -23,7 +23,8 @@ pub enum ErrorKind {
 
 #[derive(Debug)]
 pub struct Error {
-    source: tracing_error::TracedError<ErrorKind>,
+    pub source: tracing_error::TracedError<ErrorKind>,
+	pub context: SpanTrace
 }
 
 impl std::fmt::Display for Error {
@@ -41,7 +42,8 @@ impl std::error::Error for Error {
 impl<E: Into<ErrorKind>> From<E> for Error {
     fn from(source: E) -> Self {
         Self {
-            source: Into::<ErrorKind>::into(source).in_current_span()
+            source: Into::<ErrorKind>::into(source).in_current_span(),
+			context: SpanTrace::capture()
         }
     }
 }

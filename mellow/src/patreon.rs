@@ -28,7 +28,7 @@ pub struct Member {
 
 #[derive(Debug, Deserialize)]
 pub struct MemberAttributes {
-	pub patron_status: String
+	pub patron_status: Option<String>
 }
 
 #[derive(Debug, Deserialize)]
