@@ -11,7 +11,7 @@ use crate::{
 };
 
 #[tracing::instrument]
-pub async fn sync_with_token(user: UserResponse, member: DiscordMember, guild_id: &String, interaction_token: &String) -> Result<SyncMemberResult> {
+pub async fn sync_with_token(user: UserResponse, member: DiscordMember, guild_id: &String, interaction_token: &String, is_onboarding: bool) -> Result<SyncMemberResult> {
 	let result = sync_single_user(&user, &member, guild_id, None).await?;
 	let mut fields = vec![];
 	if let Some(changes) = &result.nickname_change {
@@ -54,16 +54,25 @@ pub async fn sync_with_token(user: UserResponse, member: DiscordMember, guild_id
 		}, guild_id))
 	}).await?;
 
+	let mut server_logs: Vec<ServerLog> = vec![];
+	if is_onboarding {
+		server_logs.push(ServerLog::UserCompletedOnboarding {
+			member: member.clone()
+		});
+	}
+
 	if result.profile_changed {
-		result.server.send_logs(vec![ServerLog::ServerProfileSync {
+		server_logs.push(ServerLog::ServerProfileSync {
 			kind: ProfileSyncKind::Default,
 			member,
 			forced_by: None,
 			role_changes: result.role_changes.clone(),
 			nickname_change: result.nickname_change.clone(),
 			relevant_connections: result.relevant_connections.clone()
-		}]).await?;
+		});
 	}
+
+	result.server.send_logs(server_logs).await?;
 
 	Ok(result)
 }
@@ -76,7 +85,7 @@ pub async fn sync(interaction: InteractionPayload) -> Result<SlashResponse> {
 	let member = interaction.member.unwrap();
 	if let Some(user) = get_user_by_discord(member.id(), &guild_id).await? {
 		return Ok(SlashResponse::defer(interaction.token.clone(), Box::pin(async move {
-			sync_with_token(user, member, &guild_id, &interaction.token).await?;
+			sync_with_token(user, member, &guild_id, &interaction.token, false).await?;
 			Ok(())
 		})));
 	}

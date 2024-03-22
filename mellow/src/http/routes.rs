@@ -81,10 +81,10 @@ async fn sync_member(request: HttpRequest, body: web::Json<SyncMemberPayload>, p
 		if let Some(user) = database::get_user_by_discord(&user_id, &server_id).await? {
 			let member = get_member(&server_id, &user_id).await?;
 			return Ok(web::Json(if let Some(token) = &body.webhook_token {
-				crate::commands::syncing::sync_with_token(user, member, &server_id, &token).await?
+				crate::commands::syncing::sync_with_token(user, member, &server_id, &token, false).await?
 			} else if body.is_sign_up.is_some_and(|x| x) {
 				let result = if let Some(item) = SIGN_UPS.read().await.iter().find(|x| x.user_id == user_id && x.guild_id == server_id) {
-					Some(crate::commands::syncing::sync_with_token(user, member, &server_id, &item.interaction_token).await?)
+					Some(crate::commands::syncing::sync_with_token(user, member, &server_id, &item.interaction_token, true).await?)
 				} else { None };
 				SIGN_UPS.write().await.retain(|x| x.user_id != user_id);
 

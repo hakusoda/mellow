@@ -35,7 +35,10 @@ pub enum ServerLog {
 		role_changes: Vec<RoleChange>,
 		nickname_change: Option<NicknameChange>,
 		relevant_connections: Vec<UserConnection>
-	} = 1 << 1
+	} = 1 << 1,
+	UserCompletedOnboarding {
+		member: DiscordMember
+	} = 1 << 2
 }
 
 impl ServerLog {
@@ -54,7 +57,7 @@ impl Server {
 			let mut embeds: Vec<Embed> = vec![];
 			for log in logs {
 				let value = log.discriminant();
-				if (self.logging_types & value) == value {
+				if value == 4 || (self.logging_types & value) == value {
 					match log {
 						ServerLog::ActionLog(payload) => {
 							embeds.push(Embed {
@@ -113,13 +116,15 @@ impl Server {
 									),
 									ProfileSyncKind::NewMember => format!("{} joined and has been synced", member.display_name())
 								}),
-								author: Some(EmbedAuthor {
-									url: Some(format!("https://hakumi.cafe/mellow/server/{}/member/{}", self.id, member.id())),
-									name: member.user.global_name.clone(),
-									icon_url: member.avatar.as_ref().or(member.user.avatar.as_ref()).map(|x| format!("https://cdn.discordapp.com/avatars/{}/{x}.webp?size=48", member.id())),
-									..Default::default()
-								}),
+								author: Some(self.embed_author(&member)),
 								fields: Some(fields),
+								..Default::default()
+							});
+						},
+						ServerLog::UserCompletedOnboarding { member } => {
+							embeds.push(Embed {
+								title: Some(format!("{} completed onboarding", member.display_name())),
+								author: Some(self.embed_author(&member)),
 								..Default::default()
 							});
 						}
@@ -138,5 +143,14 @@ impl Server {
 		}
 
 		Ok(())
+	}
+
+	fn embed_author(&self, member: &DiscordMember) -> EmbedAuthor {
+		EmbedAuthor {
+			url: Some(format!("https://hakumi.cafe/mellow/server/{}/member/{}", self.id, member.id())),
+			name: member.user.global_name.clone(),
+			icon_url: member.avatar.as_ref().or(member.user.avatar.as_ref()).map(|x| format!("https://cdn.discordapp.com/avatars/{}/{x}.webp?size=48", member.id())),
+			..Default::default()
+		}
 	}
 }
