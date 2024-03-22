@@ -6,7 +6,7 @@ use async_recursion::async_recursion;
 
 use crate::{
 	patreon::EnumToBeNamed,
-	database::{ get_server, ProfileSyncAction, ProfileSyncActionKind, ProfileSyncActionRequirementKind, ProfileSyncActionRequirementsKind, Server, User, UserConnection, UserConnectionKind, UserResponse, UserServerConnection, DATABASE }, discord::{ get_guild_roles, modify_member, DiscordMember, DiscordModifyMemberPayload, DiscordRole }, roblox::get_user_group_roles, Result
+	database::{ get_server, ProfileSyncAction, ProfileSyncActionKind, ProfileSyncActionRequirementKind, ProfileSyncActionRequirementsKind, Server, User, UserConnection, UserConnectionKind, UserResponse, DATABASE }, discord::{ get_guild_roles, modify_member, DiscordMember, DiscordModifyMemberPayload, DiscordRole }, roblox::get_user_group_roles, Result
 };
 
 #[derive(Debug, Serialize)]
@@ -75,8 +75,8 @@ pub async fn get_connection_metadata(users: &[UserResponse], server: &Server) ->
 				},
 				ProfileSyncActionRequirementKind::PatreonHaveCampaignTier => {
 					for user in users.iter() {
-						if let Some(connection) = user.user.connections.iter().find(|x| matches!(x.connection.kind, UserConnectionKind::Patreon)) {
-							let data = crate::patreon::get_user_memberships(&connection.connection.oauth_authorisations.as_ref().unwrap()[0]).await?;
+						if let Some(connection) = user.user.server_connections().into_iter().find(|x| matches!(x.kind, UserConnectionKind::Patreon)) {
+							let data = crate::patreon::get_user_memberships(&connection.oauth_authorisations.as_ref().unwrap()[0]).await?;
 							if let Some(included) = data.included {
 								for membership in included {
 									match membership {
@@ -85,7 +85,7 @@ pub async fn get_connection_metadata(users: &[UserResponse], server: &Server) ->
 											active: member.attributes.patron_status == "active_patron",
 											user_id: user.user.id.clone(),
 											campaign_id: member.relationships.campaign.data.id,
-											connection_id: connection.connection.id.clone()
+											connection_id: connection.id.clone()
 										}),
 										_ => ()
 									}
@@ -102,7 +102,7 @@ pub async fn get_connection_metadata(users: &[UserResponse], server: &Server) ->
 	if !group_ids.is_empty() {
 		//let roblox_ids: Vec<String> = users.iter().flat_map(|x| x.user.connections.iter().filter(|x| matches!(x.connection.kind, UserConnectionKind::Roblox)).map(|x| format!("users/{}", x.connection.sub)).collect::<Vec<String>>()).collect();
 		//let items = get_group_memberships("-", Some(format!("user in ['{}']", roblox_ids.join("','")))).await;
-		for id in users.iter().flat_map(|x| x.user.connections.iter().filter(|x| matches!(x.connection.kind, UserConnectionKind::Roblox)).map(|x| x.connection.sub.clone()).collect::<Vec<String>>()) {
+		for id in users.iter().flat_map(|x| x.user.server_connections().into_iter().filter(|x| matches!(x.kind, UserConnectionKind::Roblox)).map(|x| x.sub.clone()).collect::<Vec<String>>()) {
 			let roles = get_user_group_roles(&id).await?;
 			for role in roles {
 				roblox_memberships.push(RobloxMembership {
@@ -145,7 +145,7 @@ pub async fn sync_member(user: Option<&User>, member: &DiscordMember, server: &S
 	let mut roles = member.roles.clone();
 	let mut role_changes: Vec<RoleChange> = vec![];
 	let mut requirement_cache: HashMap<String, bool> = HashMap::new();
-	let mut used_connections: Vec<UserServerConnection> = vec![];
+	let mut used_connections: Vec<UserConnection> = vec![];
 	
 	let actions2 = server.actions.clone();
 	for action in server.actions.iter() {
@@ -187,9 +187,9 @@ pub async fn sync_member(user: Option<&User>, member: &DiscordMember, server: &S
 	let target_nickname = match &server.default_nickname {
 		Some(t) => match t.as_str() {
 			"{roblox_username}" =>
-				user.and_then(|x| x.connections.iter().find(|x| matches!(x.connection.kind, UserConnectionKind::Roblox)).and_then(|x| x.connection.username.clone())),
+				user.and_then(|x| x.server_connections().into_iter().find(|x| matches!(x.kind, UserConnectionKind::Roblox)).and_then(|x| x.username.clone())),
 			"{roblox_display_name}" =>
-				user.and_then(|x| x.connections.iter().find(|x| matches!(x.connection.kind, UserConnectionKind::Roblox)).and_then(|x| x.connection.display_name.clone())),
+				user.and_then(|x| x.server_connections().into_iter().find(|x| matches!(x.kind, UserConnectionKind::Roblox)).and_then(|x| x.display_name.clone())),
 			_ => None
 		},
 		None => None
@@ -227,7 +227,7 @@ pub async fn sync_member(user: Option<&User>, member: &DiscordMember, server: &S
 		role_changes,
 		profile_changed,
 		nickname_change,
-		relevant_connections: used_connections.into_iter().map(|x| x.connection).collect()
+		relevant_connections: used_connections
 	})
 }
 
@@ -238,7 +238,7 @@ pub async fn member_meets_action_requirements(
 	all_actions: &Vec<ProfileSyncAction>,
 	connection_metadata: &ConnectionMetadata,
 	cache: &mut HashMap<String, bool>,
-	used_connections: &mut Vec<UserServerConnection>
+	used_connections: &mut Vec<UserConnection>
 ) -> bool {
 	let mut total_met = 0;
 	let requires_one = matches!(action.requirements_type, ProfileSyncActionRequirementsKind::MeetOne);
@@ -248,10 +248,10 @@ pub async fn member_meets_action_requirements(
 			ProfileSyncActionRequirementKind::RobloxInGroup |
 			ProfileSyncActionRequirementKind::RobloxHaveGroupRole |
 			ProfileSyncActionRequirementKind::RobloxHaveGroupRankInRange => {
-				let connection = user.and_then(|x| x.connections.iter().find(|x| matches!(x.connection.kind, UserConnectionKind::Roblox)));
-				if let Some(connection) = connection.cloned() {
-					if !used_connections.contains(&connection) {
-						used_connections.push(connection);
+				let connection = user.and_then(|x| x.server_connections().into_iter().find(|x| matches!(x.kind, UserConnectionKind::Roblox)));
+				if let Some(connection) = connection{
+					if !used_connections.contains(connection) {
+						used_connections.push(connection.clone());
 					}
 				}
 
@@ -259,14 +259,14 @@ pub async fn member_meets_action_requirements(
 					ProfileSyncActionRequirementKind::RobloxHaveConnection =>
 						connection.is_some(),
 					ProfileSyncActionRequirementKind::RobloxInGroup =>
-						connection.map_or(false, |x| connection_metadata.roblox_memberships.iter().any(|e| e.user_id == x.connection.sub && e.group_id.to_string() == item.data[0])),
+						connection.map_or(false, |x| connection_metadata.roblox_memberships.iter().any(|e| e.user_id == x.sub && e.group_id.to_string() == item.data[0])),
 					ProfileSyncActionRequirementKind::RobloxHaveGroupRole =>
-						connection.map_or(false, |x| connection_metadata.roblox_memberships.iter().any(|e| e.user_id == x.connection.sub && e.role.to_string() == item.data[1])),
+						connection.map_or(false, |x| connection_metadata.roblox_memberships.iter().any(|e| e.user_id == x.sub && e.role.to_string() == item.data[1])),
 					ProfileSyncActionRequirementKind::RobloxHaveGroupRankInRange => {
 						let id = &item.data[0];
 						let min: u8 = item.data[1].parse().unwrap();
 						let max: u8 = item.data[2].parse().unwrap();
-						connection.map_or(false, |x| connection_metadata.roblox_memberships.iter().any(|e| e.user_id == x.connection.sub && e.group_id.to_string() == *id && e.rank >= min && e.rank <= max))
+						connection.map_or(false, |x| connection_metadata.roblox_memberships.iter().any(|e| e.user_id == x.sub && e.group_id.to_string() == *id && e.rank >= min && e.rank <= max))
 					},
 					_ => false
 				}
@@ -282,9 +282,9 @@ pub async fn member_meets_action_requirements(
 				let tier_id = &item.data[1];
 				if let Some(user) = user {
 					if let Some(pledge) = connection_metadata.patreon_pledges.iter().find(|x| x.active && x.user_id == user.id && x.campaign_id == *campaign_id && x.tiers.contains(tier_id)) {
-						if let Some(connection) = user.connections.iter().find(|x| x.connection.id == pledge.connection_id).cloned() {
-							if !used_connections.contains(&connection) {
-								used_connections.push(connection);
+						if let Some(connection) = user.server_connections().into_iter().find(|x| x.id == pledge.connection_id) {
+							if !used_connections.contains(connection) {
+								used_connections.push(connection.clone());
 							}
 						}
 						true

@@ -1,4 +1,4 @@
-use serde::{ Serialize, Deserialize };
+use serde::{ de::Deserializer, Serialize, Deserialize };
 use once_cell::sync::Lazy;
 use postgrest::Postgrest;
 use serde_repr::*;
@@ -17,7 +17,45 @@ pub const DATABASE: Lazy<Postgrest> = Lazy::new(|| {
 #[derive(Deserialize, Clone, Debug)]
 pub struct User {
 	pub id: String,
-	pub connections: Vec<UserServerConnection>
+	connections: Vec<UserConnection>,
+	#[serde(deserialize_with = "deserialise_user_server_settings")]
+	server_settings: [ServerSettings; 1]
+}
+
+fn deserialise_user_server_settings<'de, D: Deserializer<'de>>(deserialiser: D) -> core::result::Result<[ServerSettings; 1], D::Error> {
+	Vec::<ServerSettings>::deserialize(deserialiser)
+		.map(|x| match x.is_empty() {
+			true => [ServerSettings::default()],
+			false => [x[0].clone()]
+		})
+}
+
+impl User {
+	pub fn server_settings(&self) -> &ServerSettings {
+		&self.server_settings[0]
+	}
+	pub fn server_connections(&self) -> Vec<&UserConnection> {
+		let server_connections = &self.server_settings().user_connections;
+		self.connections.iter().filter(|x| server_connections.iter().find(|y| y.id == x.id).is_some()).collect()
+	}
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct ServerSettings {
+	pub user_connections: Vec<ServerSettingsUserConnection>
+}
+
+impl Default for ServerSettings {
+	fn default() -> Self {
+		Self {
+			user_connections: vec![]
+		}
+	}
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct ServerSettingsUserConnection {
+	pub id: String
 }
 
 #[derive(Serialize_repr, Deserialize_repr, Clone, Debug, PartialEq)]
@@ -64,12 +102,6 @@ impl UserConnection {
 	}
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct UserServerConnection {
-	pub id: String,
-	pub connection: UserConnection
-}
-
 #[derive(Deserialize, Clone, Debug)]
 pub struct UserResponse {
 	pub sub: String,
@@ -82,9 +114,9 @@ pub async fn get_user_by_discord(id: impl Into<String>, server_id: impl Into<Str
 
 pub async fn get_users_by_discord(ids: Vec<String>, server_id: impl Into<String>) -> Result<Vec<UserResponse>> {
 	Ok(serde_json::from_str(&DATABASE.from("user_connections")
-		.select("sub,user:users(id,connections:mellow_user_server_connections(id,connection:user_connections(id,sub,type,username,display_name,oauth_authorisations:user_connection_oauth_authorisations(token_type,expires_at,access_token,refresh_token))))")
+		.select("sub,user:users(id,server_settings:mellow_user_server_settings(user_connections),connections:user_connections(id,sub,type,username,display_name,oauth_authorisations:user_connection_oauth_authorisations(token_type,expires_at,access_token,refresh_token)))")
 		.in_("sub", ids)
-		.eq("users.mellow_user_server_connections.server_id", server_id.into())
+		.eq("users.mellow_user_server_settings.server_id", server_id.into())
 		.execute().await?.text().await?
 	)?)
 }
@@ -130,6 +162,7 @@ impl ProfileSyncActionRequirement {
 			ProfileSyncActionRequirementKind::RobloxHaveBadge |
 			ProfileSyncActionRequirementKind::RobloxHavePass => Some(UserConnectionKind::Roblox),
 			ProfileSyncActionRequirementKind::GitHubInOrganisation => Some(UserConnectionKind::GitHub),
+			ProfileSyncActionRequirementKind::PatreonHaveCampaignTier => Some(UserConnectionKind::Patreon),
 			_ => None
 		}
 	}

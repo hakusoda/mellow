@@ -183,7 +183,7 @@ async fn patreon_webhook(body: String) -> ApiResult<HttpResponse> {
 				active: payload.data.attributes.patron_status.map_or(false, |x| x == "active_patron"),
 				user_id: user.user.id.clone(),
 				campaign_id: payload.data.relationships.campaign.data.id.clone(),
-				connection_id: user.user.connections.iter().find(|x| matches!(x.connection.kind, database::UserConnectionKind::Patreon)).unwrap().connection.id.clone()
+				connection_id: user.user.server_connections().into_iter().find(|x| matches!(x.kind, database::UserConnectionKind::Patreon)).unwrap().id.clone()
 			}],
 			roblox_memberships: vec![]
 		})).await?;

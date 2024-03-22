@@ -42,14 +42,14 @@ pub async fn sync_with_token(user: UserResponse, member: DiscordMember, guild_id
 				..Default::default()
 			}
 		]) } else { None },
-		content: Some(format!("{}{}\n\n[<:personbadge:1219233857786875925>  Change Connections](https://hakumi.cafe/mellow/server/{}/onboarding)  • [<:personraisedhand:1219234152709095424> Get Support](https://discord.com/invite/rs3r4dQu9P)", if result.profile_changed {
+		content: Some(format!("{}{}\n\n[<:personbadge:1219233857786875925>  Change Connections](https://hakumi.cafe/mellow/server/{}/user_settings)  • [<:personraisedhand:1219234152709095424> Get Support](https://discord.com/invite/rs3r4dQu9P)", if result.profile_changed {
 			format!("## <:check2circle:1219235152580837419>  Server Profile has been updated.\n{}",
 				if result.role_changes.is_empty() { "" } else { "Your roles have been updated." }
 			)
 		} else {
 			"## <:check2circle:1219235152580837419>  Server Profile is up-to-date.\nYour server profile is already up-to-date, no adjustments have been made.\nIf you were expecting a different result, you may need to wait a few minutes.".into()
-		}, if result.server.actions.iter().all(|x| x.requirements.iter().all(|e| e.relevant_connection().map_or(true, |x| user.user.connections.iter().any(|e| x == e.connection.kind)))) { "".to_string() } else {
-			format!("\n\n### You're missing connections\nYou haven't given this server access to all connections yet, change that [here](https://hakumi.cafe/mellow/server/{guild_id}/onboarding)!")
+		}, if result.server.actions.iter().all(|x| x.requirements.iter().all(|e| e.relevant_connection().map_or(true, |x| user.user.server_connections().into_iter().any(|e| x == e.kind)))) { "".to_string() } else {
+			format!("\n\n### You're missing connections\nYou haven't given this server access to all connections yet, change that [here](https://hakumi.cafe/mellow/server/{guild_id}/user_settings)!")
 		}, guild_id))
 	}).await?;
 
@@ -82,7 +82,7 @@ pub async fn sync(interaction: InteractionPayload) -> Result<SlashResponse> {
 	create_sign_up(member.id(), guild_id, interaction.token).await;
 	Ok(SlashResponse::Message {
 		flags: Some(64),
-		content: Some(format!("## Hello, welcome to the server!\nYou appear to be new to mellow, this server uses mellow to sync member profiles with external services, such as Roblox.\nIf you would like to continue, please continue [here](https://discord.com/api/oauth2/authorize?client_id=1068554282481229885&redirect_uri=https%3A%2F%2Fapi.hakumi.cafe%2Fv0%2Fauth%2Fcallback%2Fmellow&response_type=code&scope=identify&state=sync_{}), don't worry, it shouldn't take long!", interaction.guild_id.unwrap()))
+		content: Some(format!("## Hello, welcome to the server!\nYou appear to be new to mellow, this server uses mellow to sync member profiles with external services, such as Roblox.\nIf you would like to continue, please continue [here](https://discord.com/api/oauth2/authorize?client_id=1068554282481229885&redirect_uri=https%3A%2F%2Fapi.hakumi.cafe%2Fv0%2Fauth%2Fcallback%2Fmellow&response_type=code&scope=identify&state=sync.{}), don't worry, it shouldn't take long!", interaction.guild_id.unwrap()))
 	})
 }
 
