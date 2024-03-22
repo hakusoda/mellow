@@ -26,8 +26,12 @@ pub async fn setup(interaction: InteractionPayload) -> Result<SlashResponse> {
 						"name": "{}",
 						"creator_id": "{}",
 						"avatar_url": "https://cdn.discordapp.com/icons/{guild_id}/{}.webp",
+						"banner_url": {},
 						"owner_user_id": "{}"
-					}}"#, guild.name, user.user.id, guild.icon.unwrap_or("".into()), user.user.id))
+					}}"#, guild.name, user.user.id, guild.icon.unwrap_or("".into()), user.user.id, match guild.splash {
+						Some(x) => format!("\"https://cdn.discordapp.com/splashes/{guild_id}/{x}.webp?size=1032\""),
+						None => "null".into()
+					}))
 					.execute()
 					.await?;
 

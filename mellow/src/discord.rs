@@ -75,7 +75,8 @@ pub async fn create_channel_message(channel_id: &String, payload: ChannelMessage
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct DiscordGuild {
 	pub name: String,
-	pub icon: Option<String>
+	pub icon: Option<String>,
+	pub splash: Option<String>
 }
 
 pub async fn get_guild(guild_id: impl Into<String>) -> Result<DiscordGuild> {
