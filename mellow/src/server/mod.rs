@@ -1,7 +1,6 @@
 use serde::{ Serialize, Deserialize };
 
 use crate::{
-	http::routes::ActionLogWebhookPayload,
 	discord::{ DiscordMember, ChannelMessage, create_channel_message },
 	syncing::{ RoleChange, NicknameChange, RoleChangeKind },
 	database::{ Server, UserConnection },
@@ -23,10 +22,81 @@ impl Default for ProfileSyncKind {
 }
 
 #[derive(Deserialize, Serialize)]
+pub struct ActionLog {
+	#[serde(rename = "type")]
+	pub kind: String,
+	pub data: serde_json::Value,
+	pub author: ActionLogAuthor,
+	pub server_id: String,
+	pub target_action: Option<IdentifiedObject>,
+	pub target_webhook: Option<IdentifiedObject>
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct IdentifiedObject {
+	pub id: String,
+	pub name: String
+}
+
+fn unwrap_string_or_array(value: &serde_json::Value) -> Option<&str> {
+	value.as_array().map_or_else(|| value.as_str(), |x| x.get(0).and_then(|x| x.as_str()))
+}
+
+fn format_sync_action(action_log: &ActionLog, server_id: impl Into<String>) -> String {
+	if let Some(action) = &action_log.target_action {
+		format!("<:sync_action:1220987025608413195> [{}](https://hakumi.cafe/mellow/server/{}/syncing/actions/{})", action.name, server_id.into(), action.id)
+	} else {
+		format!("<:sync_action_deleted:1220987839328682056> ~~{}~~", action_log.data.get("name").and_then(unwrap_string_or_array).unwrap_or("Unknown Action"))
+	}
+}
+
+fn format_webhook(action_log: &ActionLog, server_id: impl Into<String>) -> String {
+	if let Some(webhook) = &action_log.target_webhook {
+		format!("<:webhook:1220992010975051796> [{}](https://hakumi.cafe/mellow/server/{}/settings/webhooks/{})", webhook.name, server_id.into(), webhook.id)
+	} else {
+		format!("<:webhook_deleted:1220992273525772309> ~~{}~~", action_log.data.get("name").and_then(unwrap_string_or_array).unwrap_or("Unknown Webhook"))
+	}
+}
+
+impl ActionLog {
+	pub fn action_string(&self, server_id: impl Into<String>) -> String {
+		let server_id: String = server_id.into();
+		match self.kind.as_str() {
+			"mellow.server.api_key.created" => "created a new API Key".into(),
+			"mellow.server.webhook.created" => format!("created  {}", format_webhook(&self, server_id)),
+			"mellow.server.webhook.updated" => format!("updated  {}", format_webhook(&self, server_id)),
+			"mellow.server.webhook.deleted" => format!("deleted  {}", format_webhook(&self, server_id)),
+			"mellow.server.syncing.action.created" => format!("created  {}", format_sync_action(&self, server_id)),
+			"mellow.server.syncing.action.updated" => format!("updated  {}", format_sync_action(&self, server_id)),
+			"mellow.server.syncing.action.deleted" => format!("deleted  {}", format_sync_action(&self, server_id)),
+			"mellow.server.syncing.settings.updated" => "updated the syncing settings".into(),
+			"mellow.server.discord_logging.updated" => "updated the logging settings".into(),
+			"mellow.server.ownership.changed" => "transferred ownership to {unimplemented}".into(),
+			"mellow.server.automation.event.updated" => format!("updated the {} event", self.data.get("event_name").and_then(|x| x.as_str()).unwrap_or("unknown")),
+			_ => self.kind.clone()
+		}
+	}
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct ActionLogAuthor {
+	pub id: String,
+	pub name: Option<String>,
+	pub username: String,
+	pub avatar_url: Option<String>
+}
+
+impl ActionLogAuthor {
+	pub fn display_name(&self) -> String {
+		self.name.as_ref().map_or_else(|| self.username.clone(), |x| x.clone())
+	}
+}
+
+#[derive(Deserialize, Serialize)]
 #[serde(tag = "type", content = "data")]
 #[repr(u8)]
 pub enum ServerLog {
-	ActionLog(ActionLogWebhookPayload) = 1 << 0,
+	ActionLog(ActionLog) = 1 << 0,
 	ServerProfileSync {
 		#[serde(skip)]
 		kind: ProfileSyncKind,
@@ -60,21 +130,33 @@ impl Server {
 				if value == 4 || (self.logging_types & value) == value {
 					match log {
 						ServerLog::ActionLog(payload) => {
+							let website_url = format!("https://hakumi.cafe/mellow/server/{}/settings/action_log", self.id);
+
+							let mut details: Vec<String> = vec![];
+							if payload.kind == "mellow.server.syncing.action.created" {
+								if let Some(name) = payload.data.get("name").and_then(unwrap_string_or_array) {
+									details.push(format!("* With name **{name}**"));
+								}
+								if let Some(requirements) = payload.data.get("requirements").and_then(|x| x.as_i64()) {
+									details.push(format!("* With {requirements} requirement(s)"));
+								}
+							}
+							if payload.kind == "mellow.server.syncing.action.created" || payload.kind == "mellow.server.syncing.action.updated" || payload.kind == "mellow.server.syncing.settings.updated" || payload.kind == "mellow.server.discord_logging.updated" || payload.kind == "mellow.server.automation.event.updated" {
+								details.push(format!("* *View the full details [here]({website_url})*"));
+							}
+
 							embeds.push(Embed {
-								title: Some(
-									format!("{} {}",
-										payload.author.display_name(),
-										match payload.kind.as_str() {
-											"mellow.server.api_key.created" => "created a new API Key",
-											"mellow.server.syncing.action.created" => "created [AN ACTION]",
-											"mellow.server.syncing.action.updated" => "updated [AN ACTION]",
-											"mellow.server.syncing.action.deleted" => "deleted [AN ACTION]",
-											"mellow.server.syncing.settings.updated" => "updated the syncing settings",
-											"mellow.server.discord_logging.updated" => "updated Discord logging settings",
-											_ => &payload.kind
-										}
-									)
-								),
+								author: Some(EmbedAuthor {
+									url: Some(website_url),
+									name: Some("New Action Log".into()),
+									icon_url: payload.author.avatar_url.clone()
+								}),
+								description: Some(format!("### [{}](https://hakumi.cafe/user/{}) {}\n{}",
+									payload.author.display_name(),
+									payload.author.username,
+									payload.action_string(&self.id),
+									details.join("\n")
+								)),
 								..Default::default()
 							});
 						},

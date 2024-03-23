@@ -11,7 +11,7 @@ use ed25519_dalek::{ Verifier, Signature, VerifyingKey };
 use super::{ ApiError, ApiResult };
 use crate::{
 	fetch,
-	server::ServerLog,
+	server::{ ActionLog, ServerLog },
 	discord::{ APP_ID, get_member },
 	syncing::{ PatreonPledge, SyncMemberResult, ConnectionMetadata, SIGN_UPS, sync_single_user },
 	database,
@@ -97,32 +97,11 @@ async fn sync_member(request: HttpRequest, body: web::Json<SyncMemberPayload>, p
 	} else { Err(ApiError::InvalidApiKey) }
 }
 
-#[derive(Deserialize, Serialize)]
-pub struct ActionLogAuthor {
-	pub id: String,
-	pub name: Option<String>,
-	pub username: String
-}
-
-impl ActionLogAuthor {
-	pub fn display_name(&self) -> String {
-		self.name.as_ref().map_or_else(|| self.username.clone(), |x| x.clone())
-	}
-}
-
-#[derive(Deserialize, Serialize)]
-pub struct ActionLogWebhookPayload {
-	#[serde(rename = "type")]
-	pub kind: String,
-	pub author: ActionLogAuthor,
-	pub server_id: String
-}
-
 #[post("/supabase_webhooks/action_log")]
 async fn action_log_webhook(request: HttpRequest, body: String) -> ApiResult<HttpResponse> {
 	absolutesolver(&request, &body)?;
 
-	let payload: ActionLogWebhookPayload = serde_json::from_str(&body)
+	let payload: ActionLog = serde_json::from_str(&body)
 		.map_err(|_| ApiError::GenericInvalidRequest)?;
 
 	database::get_server(&payload.server_id)
