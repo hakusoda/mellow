@@ -111,7 +111,11 @@ pub enum ServerLog {
 		invoker: DiscordMember,
 		event_kind: String,
 		member_result: EventResponseResultMemberResult
-	} = 1 << 3
+	} = 1 << 3,
+	VisualScriptingProcessorError {
+		error: String,
+		document_name: String
+	} = 1 << 4
 }
 
 #[derive(Deserialize, Serialize)]
@@ -137,7 +141,7 @@ impl Server {
 			let mut embeds: Vec<Embed> = vec![];
 			for log in logs {
 				let value = log.discriminant();
-				if value == 4 || value == 8 || (self.logging_types & value) == value {
+				if value == 4 || value == 8 || value == 16 || (self.logging_types & value) == value {
 					match log {
 						ServerLog::ActionLog(payload) => {
 							let website_url = format!("https://hakumi.cafe/mellow/server/{}/settings/action_log", self.id);
@@ -228,6 +232,13 @@ impl Server {
 									_ => "no result".into()
 								}),
 								author: Some(self.embed_author(&invoker, Some(format!("Event Response Result ({event_kind})")))),
+								..Default::default()
+							});
+						},
+						ServerLog::VisualScriptingProcessorError { error, document_name } => {
+							embeds.push(Embed {
+								title: Some(format!("The Visual Scripting Document named “{document_name}” encountered an error while being processed, tragic...")),
+								description: Some(error),
 								..Default::default()
 							});
 						}

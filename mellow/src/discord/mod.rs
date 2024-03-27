@@ -7,6 +7,8 @@ use crate::{
 	Result
 };
 
+pub mod gateway;
+
 pub const APP_ID: &str = env!("DISCORD_APP_ID");
 
 pub async fn edit_original_response(token: impl Into<String>, payload: InteractionResponseData) -> Result<()> {
