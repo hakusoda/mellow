@@ -8,8 +8,6 @@ use crate::{
 	Result
 };
 
-pub mod event;
-
 pub enum ProfileSyncKind {
 	Default,
 	NewMember
@@ -108,7 +106,19 @@ pub enum ServerLog {
 	} = 1 << 1,
 	UserCompletedOnboarding {
 		member: DiscordMember
-	} = 1 << 2
+	} = 1 << 2,
+	EventResponseResult {
+		invoker: DiscordMember,
+		event_kind: String,
+		member_result: EventResponseResultMemberResult
+	} = 1 << 3
+}
+
+#[derive(Deserialize, Serialize)]
+pub enum EventResponseResultMemberResult {
+	None,
+	Banned,
+	Kicked
 }
 
 impl ServerLog {
@@ -127,7 +137,7 @@ impl Server {
 			let mut embeds: Vec<Embed> = vec![];
 			for log in logs {
 				let value = log.discriminant();
-				if value == 4 || (self.logging_types & value) == value {
+				if value == 4 || value == 8 || (self.logging_types & value) == value {
 					match log {
 						ServerLog::ActionLog(payload) => {
 							let website_url = format!("https://hakumi.cafe/mellow/server/{}/settings/action_log", self.id);
@@ -198,7 +208,7 @@ impl Server {
 									),
 									ProfileSyncKind::NewMember => format!("{} joined and has been synced", member.display_name())
 								}),
-								author: Some(self.embed_author(&member)),
+								author: Some(self.embed_author(&member, None)),
 								fields: Some(fields),
 								..Default::default()
 							});
@@ -206,7 +216,18 @@ impl Server {
 						ServerLog::UserCompletedOnboarding { member } => {
 							embeds.push(Embed {
 								title: Some(format!("{} completed onboarding", member.display_name())),
-								author: Some(self.embed_author(&member)),
+								author: Some(self.embed_author(&member, None)),
+								..Default::default()
+							});
+						},
+						ServerLog::EventResponseResult { invoker, event_kind, member_result} => {
+							embeds.push(Embed {
+								title: Some(match member_result {
+									EventResponseResultMemberResult::Banned => format!("{} was banned", invoker.display_name()),
+									EventResponseResultMemberResult::Kicked => format!("{} was kicked", invoker.display_name()),
+									_ => "no result".into()
+								}),
+								author: Some(self.embed_author(&invoker, Some(format!("Event Response Result ({event_kind})")))),
 								..Default::default()
 							});
 						}
@@ -227,10 +248,10 @@ impl Server {
 		Ok(())
 	}
 
-	fn embed_author(&self, member: &DiscordMember) -> EmbedAuthor {
+	fn embed_author(&self, member: &DiscordMember, title: Option<String>) -> EmbedAuthor {
 		EmbedAuthor {
 			url: Some(format!("https://hakumi.cafe/mellow/server/{}/member/{}", self.id, member.id())),
-			name: member.user.global_name.clone(),
+			name: title.or(member.user.global_name.clone()),
 			icon_url: member.avatar.as_ref().or(member.user.avatar.as_ref()).map(|x| format!("https://cdn.discordapp.com/avatars/{}/{x}.webp?size=48", member.id())),
 			..Default::default()
 		}

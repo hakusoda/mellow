@@ -50,16 +50,12 @@ pub struct UserGroupRole {
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct PartialGroup {
-	pub id: u128,
-	pub name: String,
-	pub member_count: u128,
-	pub has_verified_badge: bool
+	pub id: u128
 }
 
 #[derive(Deserialize, Debug)]
 pub struct PartialGroupRole {
 	pub id: u128,
-	pub name: String,
 	pub rank: u8
 }
 

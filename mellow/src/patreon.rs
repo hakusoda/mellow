@@ -21,7 +21,6 @@ pub enum EnumToBeNamed {
 
 #[derive(Debug, Deserialize)]
 pub struct Member {
-	pub id: String,
 	pub attributes: MemberAttributes,
 	pub relationships: Relationships
 }

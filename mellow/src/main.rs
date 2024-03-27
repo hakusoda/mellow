@@ -1,4 +1,6 @@
+#![feature(async_closure)]
 use std::collections::HashMap;
+use tokio_stream::StreamExt;
 use simple_logger::SimpleLogger;
 use twilight_model::gateway::{
 	payload::outgoing::update_presence::UpdatePresencePayload,
@@ -6,9 +8,11 @@ use twilight_model::gateway::{
 };
 use twilight_gateway::{ Event, Shard, Intents, ShardId };
 
-use server::event::start_event_response;
+use server::{ ServerLog, ProfileSyncKind };
+use discord::{ ban_member, remove_member };
 use database::get_server_event_response_tree;
 use interaction::InteractionPayload;
+use visual_scripting::{ Element, ElementStream };
 
 mod http;
 mod error;
@@ -21,6 +25,7 @@ mod patreon;
 mod commands;
 mod database;
 mod interaction;
+mod visual_scripting;
 
 pub struct Command {
 	name: &'static str,
@@ -52,6 +57,13 @@ impl SlashResponse {
 		});
 		SlashResponse::DeferMessage
 	}
+}
+
+enum EventProcessorResult {
+	MemberBanned,
+	MemberKicked,
+	MemberSynced,
+	None
 }
 
 #[actix_web::main]
@@ -99,23 +111,66 @@ async fn main() -> std::io::Result<()> {
 
 			match event {
 				Event::MemberAdd(data) => {
-					let user_id = data.user.id.to_string();
-					let server_id = data.guild_id.to_string();
-					let response_tree = get_server_event_response_tree(&server_id, "member_join").await.unwrap();
-					if !response_tree.is_empty() {
-						if let Some(user) = database::get_user_by_discord(&user_id, &server_id).await.unwrap() {
-							let member = discord::get_member(&server_id, &user_id).await.unwrap();
-							start_event_response(&response_tree, &HashMap::from([
-								("globals".into(), serde_json::json!({
-									"member": {
+					tokio::spawn(async move {
+						let user_id = data.user.id.to_string();
+						let server_id = data.guild_id.to_string();
+						let response_tree = get_server_event_response_tree(&server_id, "member_join").await.unwrap();
+						if !response_tree.is_empty() {
+							if let Some(user) = database::get_user_by_discord(&user_id, &server_id).await.unwrap() {
+								let member = discord::get_member(&server_id, &user_id).await.unwrap();
+								let mut element_stream = ElementStream::new(response_tree, HashMap::from([
+									("member".into(), serde_json::json!({
 										"id": member.id(),
 										"username": member.user.username,
+										"avatar_url": member.user.avatar.as_ref().map(|x| format!("https://cdn.discordapp.com/avatars/{}/{x}.webp", member.id())),
 										"display_name": member.display_name()
+									}))
+								]));
+
+								let mut processor_result = EventProcessorResult::None;
+								while let Some(element) = element_stream.next().await {
+									match element {
+										Element::BanMember => {
+											ban_member(&server_id, member.id()).await.unwrap();
+											processor_result = EventProcessorResult::MemberBanned;
+											break;
+										},
+										Element::KickMember => {
+											remove_member(&server_id, member.id()).await.unwrap();
+											processor_result = EventProcessorResult::MemberKicked;
+											break;
+										},
+										Element::SyncMemberProfile => {
+											let result = syncing::sync_single_user(&user, &member, &server_id, None).await.unwrap();
+											if result.profile_changed {
+												result.server.send_logs(vec![ServerLog::ServerProfileSync {
+													kind: ProfileSyncKind::NewMember,
+													member: member.clone(),
+													forced_by: None,
+													role_changes: result.role_changes.clone(),
+													nickname_change: result.nickname_change.clone(),
+													relevant_connections: result.relevant_connections.clone()
+												}]).await.unwrap();
+											}
+											processor_result = EventProcessorResult::MemberSynced;
+											break;
+										},
+										_ => ()
 									}
-								}))
-							]), &server_id, Some(&user), Some(&member)).await;
+								}
+
+								database::get_server(server_id).await.unwrap().send_logs(vec![server::ServerLog::EventResponseResult {
+									invoker: member.clone(),
+									event_kind: "member_join".into(),
+									member_result: match processor_result {
+										EventProcessorResult::MemberBanned => server::EventResponseResultMemberResult::Banned,
+										EventProcessorResult::MemberKicked => server::EventResponseResultMemberResult::Kicked,
+										_ => server::EventResponseResultMemberResult::None
+									}
+								}]).await.unwrap();
+							}
 						}
-					}
+					});
 				},
 				_ => ()
 			}

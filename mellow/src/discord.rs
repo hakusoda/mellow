@@ -49,6 +49,10 @@ pub async fn modify_member(guild_id: String, user_id: String, payload: DiscordMo
 	patch_json(format!("https://discord.com/api/v10/guilds/{guild_id}/members/{user_id}"), payload).await
 }
 
+pub async fn ban_member(guild_id: impl Into<String>, user_id: impl Into<String>) -> Result<()> {
+	fetch_json(format!("https://discord.com/api/v10/guilds/{}/bans/{}", guild_id.into(), user_id.into()), Some(Method::PUT), None, None).await
+}
+
 pub async fn remove_member(guild_id: impl Into<String>, user_id: impl Into<String>) -> Result<()> {
 	fetch_json(format!("https://discord.com/api/v10/guilds/{}/members/{}", guild_id.into(), user_id.into()), Some(Method::DELETE), None, None).await
 }

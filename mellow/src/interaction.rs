@@ -19,10 +19,10 @@ pub enum ApplicationCommandKind {
 
 #[derive(Deserialize, Debug)]
 pub struct ApplicationCommandData {
-	pub id: String,
+	//pub id: String,
 	pub name: String,
-	#[serde(rename = "type")]
-	pub kind: ApplicationCommandKind
+	//#[serde(rename = "type")]
+	//pub kind: ApplicationCommandKind
 }
 
 #[derive(Deserialize_repr, Debug)]

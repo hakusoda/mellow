@@ -3,7 +3,7 @@ use once_cell::sync::Lazy;
 use postgrest::Postgrest;
 use serde_repr::*;
 use crate::{
-	server::event::EventResponseItem,
+	visual_scripting,
 	Result
 };
 
@@ -215,7 +215,7 @@ pub async fn get_server(id: impl Into<String>) -> Result<Server> {
 	)?)
 }
 
-pub async fn get_server_event_response_tree(server_id: impl Into<String>, tree_name: impl Into<String>) -> Result<Vec<EventResponseItem>> {
+pub async fn get_server_event_response_tree(server_id: impl Into<String>, tree_name: impl Into<String>) -> Result<Vec<visual_scripting::Element>> {
 	let value: serde_json::Value = serde_json::from_str(&DATABASE.from("mellow_servers")
 		.select(format!("items:{}_event_response_tree", tree_name.into()))
 		.eq("id", server_id.into())
