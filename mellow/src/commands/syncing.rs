@@ -2,10 +2,17 @@ use tokio::time;
 use mellow_macros::command;
 
 use crate::{
-	server::{ ServerLog, ProfileSyncKind },
+	server::{
+		logging::{ ServerLog, ProfileSyncKind },
+		Server
+	},
 	discord::{ DiscordMember, get_members, edit_original_response },
-	syncing::{ RoleChangeKind, SyncMemberResult, sync_member, create_sign_up, get_connection_metadata, sync_single_user },
-	database::{ UserResponse, get_server, get_user_by_discord, get_users_by_discord },
+	syncing::{
+		sign_ups::create_sign_up,
+		RoleChangeKind, SyncMemberResult,
+		sync_member, get_connection_metadata, sync_single_user
+	},
+	database::{ UserResponse, get_user_by_discord, get_users_by_discord },
 	interaction::{ Embed, EmbedField, InteractionPayload, InteractionResponseData },
 	Result, SlashResponse
 };
@@ -104,7 +111,7 @@ pub async fn forcesyncall(interaction: InteractionPayload) -> Result<SlashRespon
 	Ok(SlashResponse::defer(interaction.token.clone(), Box::pin(async move {
 		let guild_id = interaction.guild_id.unwrap();
 		
-		let server = get_server(&guild_id).await?;
+		let server = Server::fetch(&guild_id).await?;
 		let members = get_members(&guild_id).await?;
 		
 		let users = get_users_by_discord(members.iter().map(|x| x.id()).collect(), guild_id).await?;

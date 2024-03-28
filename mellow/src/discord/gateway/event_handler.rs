@@ -3,7 +3,10 @@ use tokio_stream::StreamExt;
 use twilight_model::gateway::payload::incoming::MemberAdd;
 
 use crate::{
-	server::{ ServerLog, ProfileSyncKind, EventResponseResultMemberResult },
+	server::{
+		logging::{ ServerLog, ProfileSyncKind, EventResponseResultMemberResult },
+		Server
+	},
 	syncing::sync_single_user,
 	discord::{ ban_member, get_member, remove_member },
 	database,
@@ -68,7 +71,7 @@ pub async fn member_add(event_data: &MemberAdd) -> Result<()> {
 				}
 			}
 
-			database::get_server(server_id).await?.send_logs(vec![ServerLog::EventResponseResult {
+			Server::fetch(server_id).await?.send_logs(vec![ServerLog::EventResponseResult {
 				invoker: member.clone(),
 				event_kind: document.name,
 				member_result: match processor_result {

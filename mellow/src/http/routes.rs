@@ -11,9 +11,17 @@ use ed25519_dalek::{ Verifier, Signature, VerifyingKey };
 use super::{ ApiError, ApiResult };
 use crate::{
 	fetch,
-	server::{ ActionLog, ServerLog },
+	server::{
+		logging::ServerLog,
+		action_log::ActionLog,
+		Server
+	},
 	discord::{ APP_ID, get_member },
-	syncing::{ PatreonPledge, SyncMemberResult, ConnectionMetadata, SIGN_UPS, sync_single_user },
+	syncing::{
+		sign_ups::SIGN_UPS,
+		PatreonPledge, SyncMemberResult, ConnectionMetadata,
+		sync_single_user
+	},
 	database,
 	commands::COMMANDS,
 	interaction,
@@ -104,7 +112,7 @@ async fn action_log_webhook(request: HttpRequest, body: String) -> ApiResult<Htt
 	let payload: ActionLog = serde_json::from_str(&body)
 		.map_err(|_| ApiError::GenericInvalidRequest)?;
 
-	database::get_server(&payload.server_id)
+	Server::fetch(&payload.server_id)
 		.await?
 		.send_logs(vec![ServerLog::ActionLog(payload)])
 		.await?;

@@ -1,13 +1,14 @@
-use std::time::SystemTime;
 use std::collections::HashMap;
 use serde::{ Serialize, Deserialize };
-use tokio::sync::RwLock;
 use async_recursion::async_recursion;
 
 use crate::{
+	server::Server,
 	patreon::UserIdentityField,
-	database::{ get_server, ProfileSyncAction, ProfileSyncActionKind, ProfileSyncActionRequirementKind, ProfileSyncActionRequirementsKind, Server, User, UserConnection, UserConnectionKind, UserResponse, DATABASE }, discord::{ get_guild_roles, modify_member, DiscordMember, DiscordModifyMemberPayload, DiscordRole }, roblox::get_user_group_roles, Result
+	database::{ ProfileSyncAction, ProfileSyncActionKind, ProfileSyncActionRequirementKind, ProfileSyncActionRequirementsKind, User, UserConnection, UserConnectionKind, UserResponse, DATABASE }, discord::{ get_guild_roles, modify_member, DiscordMember, DiscordModifyMemberPayload, DiscordRole }, roblox::get_user_group_roles, Result
 };
+
+pub mod sign_ups;
 
 #[derive(Debug, Serialize)]
 pub struct SyncMemberResult {
@@ -133,7 +134,7 @@ async fn get_role_name(id: String, guild_id: impl Into<String>, roles: &mut Opti
 }
 
 pub async fn sync_single_user(user: &UserResponse, member: &DiscordMember, guild_id: impl Into<String>, connection_metadata: Option<ConnectionMetadata>) -> Result<SyncMemberResult> {
-	let server = get_server(guild_id).await?;
+	let server = Server::fetch(guild_id).await?;
 	let metadata = match connection_metadata {
 		Some(x) => x,
 		None => get_connection_metadata(&vec![user.clone()], &server).await?
@@ -303,29 +304,4 @@ pub async fn member_meets_action_requirements(
 		}
 	}
 	total_met == action.requirements.len()
-}
-
-pub struct SignUp {
-	pub user_id: String,
-	pub guild_id: String,
-	pub created_at: SystemTime,
-	pub interaction_token: String
-}
-
-pub static SIGN_UPS: RwLock<Vec<SignUp>> = RwLock::const_new(vec![]);
-
-pub async fn create_sign_up(user_id: String, guild_id: String, interaction_token: String) {
-	let mut items = SIGN_UPS.write().await;
-	if let Some(existing) = items.iter_mut().find(|x| x.user_id == user_id) {
-		existing.guild_id = guild_id;
-		existing.created_at = SystemTime::now();
-		existing.interaction_token = interaction_token;
-	} else {
-		items.push(SignUp {
-			user_id,
-			guild_id,
-			created_at: SystemTime::now(),
-			interaction_token
-		});
-	}
 }

@@ -2,7 +2,7 @@ use mellow_macros::command;
 
 use crate::{
 	Result,
-	discord::{ get_guild, edit_original_response },
+	discord::{ Guild, edit_original_response },
 	database::{ DATABASE, server_exists, get_user_by_discord },
 	interaction::{ InteractionPayload, InteractionResponseData },
 	SlashResponse
@@ -19,7 +19,7 @@ pub async fn setup(interaction: InteractionPayload) -> Result<SlashResponse> {
 	} else {
 		if let Some(user) = get_user_by_discord(interaction.member.unwrap().id(), guild_id.clone()).await? {
 			SlashResponse::defer(interaction.token.clone(), Box::pin(async move {
-				let guild = get_guild(&guild_id).await.unwrap();
+				let guild = Guild::fetch(&guild_id).await.unwrap();
 				DATABASE.from("mellow_servers")
 					.insert(format!(r#"{{
 						"id": "{guild_id}",
