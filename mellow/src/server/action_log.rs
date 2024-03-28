@@ -39,7 +39,16 @@ impl ActionLog {
 			"mellow.server.discord_logging.updated" => "updated the logging settings".into(),
 			"mellow.server.ownership.changed" => "transferred ownership to {unimplemented}".into(),
 			"mellow.server.automation.event.updated" => format!("updated the {} event", self.data.get("event_name").and_then(|x| x.as_str()).unwrap_or("unknown")),
+			"mellow.server.visual_scripting.document.updated" => format!("updated the {} visual scripting document", self.format_document()),
 			_ => self.kind.clone()
+		}
+	}
+
+	fn format_document(&self) -> String {
+		if let Some(document) = &self.target_document {
+			format!("<:document:1222904218499940395> {}]", document.name)
+		} else {
+			format!("<:document_deleted:1222904235281092638> ~~{}~~", self.data.get("name").and_then(unwrap_string_or_array).unwrap_or("Unknown Action"))
 		}
 	}
 
