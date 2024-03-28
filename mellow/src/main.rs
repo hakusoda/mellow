@@ -1,4 +1,3 @@
-#![feature(duration_constructors)]
 use simple_logger::SimpleLogger;
 
 use interaction::InteractionPayload;
