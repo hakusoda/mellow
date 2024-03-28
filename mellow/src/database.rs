@@ -215,18 +215,20 @@ pub async fn get_server(id: impl Into<String>) -> Result<Server> {
 	)?)
 }
 
-pub async fn get_server_event_response_tree(server_id: impl Into<String>, tree_name: impl Into<String>) -> Result<Vec<visual_scripting::Element>> {
-	let value: serde_json::Value = serde_json::from_str(&DATABASE.from("mellow_servers")
-		.select(format!("items:{}_event_response_tree", tree_name.into()))
-		.eq("id", server_id.into())
+pub async fn get_server_event_response_tree(server_id: impl Into<String>, kind: visual_scripting::DocumentKind) -> Result<visual_scripting::Document> {
+	let kind = serde_json::to_string(&kind).unwrap();
+	let kind = kind.chars().skip(1);
+	Ok(serde_json::from_str(&DATABASE.from("visual_scripting_documents")
+		.select("id,name,kind,definition")
+		.eq("kind", kind.clone().take(kind.count() - 1).collect::<String>())
+		.eq("mellow_server_id", server_id.into())
 		.limit(1)
 		.single()
 		.execute()
 		.await?
 		.text()
 		.await?
-	)?;
-	Ok(serde_json::from_value(value.get("items").unwrap().clone())?)
+	)?)
 }
 
 pub async fn server_exists(id: impl Into<String>) -> Result<bool> {

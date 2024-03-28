@@ -1,8 +1,23 @@
 use std::collections::HashMap;
-use serde::Deserialize;
+use serde::{ Serialize, Deserialize };
 
 pub mod stream;
 pub use stream::ElementStream;
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct Document {
+	//pub id: String,
+	pub name: String,
+	//pub kind: DocumentKind,
+	pub definition: Vec<Element>
+}
+
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum DocumentKind {
+	#[serde(rename = "mellow.discord_event.member_join")]
+	MemberJoinEvent
+}
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "kind")]

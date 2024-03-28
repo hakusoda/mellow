@@ -7,7 +7,7 @@ use crate::{
 	syncing::sync_single_user,
 	discord::{ ban_member, get_member, remove_member },
 	database,
-	visual_scripting::{ Element, ElementStream },
+	visual_scripting::{ Element, DocumentKind, ElementStream },
 	Result
 };
 
@@ -21,11 +21,13 @@ enum EventProcessorResult {
 pub async fn member_add(event_data: &MemberAdd) -> Result<()> {
 	let user_id = event_data.user.id.to_string();
 	let server_id = event_data.guild_id.to_string();
-	let response_tree = database::get_server_event_response_tree(&server_id, "member_join").await?;
-	if !response_tree.is_empty() {
+
+	let document = database::get_server_event_response_tree(&server_id, DocumentKind::MemberJoinEvent).await?;
+	let definition = document.definition;
+	if !definition.is_empty() {
 		if let Some(user) = database::get_user_by_discord(&user_id, &server_id).await? {
 			let member = get_member(&server_id, &user_id).await?;
-			let mut element_stream = ElementStream::new(response_tree, HashMap::from([
+			let mut element_stream = ElementStream::new(definition, HashMap::from([
 				("member".into(), serde_json::json!({
 					"id": member.id(),
 					"username": member.user.username,
@@ -68,7 +70,7 @@ pub async fn member_add(event_data: &MemberAdd) -> Result<()> {
 
 			database::get_server(server_id).await?.send_logs(vec![ServerLog::EventResponseResult {
 				invoker: member.clone(),
-				event_kind: "member_join".into(),
+				event_kind: document.name,
 				member_result: match processor_result {
 					EventProcessorResult::MemberBanned => EventResponseResultMemberResult::Banned,
 					EventProcessorResult::MemberKicked => EventResponseResultMemberResult::Kicked,
