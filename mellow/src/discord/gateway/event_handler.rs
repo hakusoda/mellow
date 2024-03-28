@@ -92,15 +92,19 @@ pub async fn member_add(event_data: &MemberAdd) -> Result<()> {
 }
 
 pub async fn message_create(event_data: &MessageCreate) -> Result<()> {
-	let user_id = event_data.author.id.to_string();
 	let server_id = event_data.guild_id.unwrap().to_string();
 
 	let document = database::get_server_event_response_tree(&server_id, DocumentKind::MessageCreatedEvent).await?;
 	let definition = document.definition;
 	if !definition.is_empty() {
-		let member = get_member(&server_id, &user_id).await?;
+		let author = &event_data.author;
 		let mut element_stream = ElementStream::new(definition, HashMap::from([
-			member_to_json(&member),
+			("member".into(), serde_json::json!({
+				"id": author.id.to_string(),
+				"username": &author.name,
+				"avatar_url": author.avatar.as_ref().map(|x| format!("https://cdn.discordapp.com/avatars/{}/{x}.webp", author.id)),
+				"display_name": author.global_name.as_ref().unwrap_or(&author.name)
+			})),
 			("message".into(), serde_json::json!({
 				"content": event_data.content.clone()
 			}))
@@ -109,11 +113,11 @@ pub async fn message_create(event_data: &MessageCreate) -> Result<()> {
 		while let Some(element) = element_stream.next().await {
 			match element {
 				Element::BanMember => {
-					ban_member(&server_id, member.id()).await?;
+					ban_member(&server_id, author.id.to_string()).await?;
 					break;
 				},
 				Element::KickMember => {
-					remove_member(&server_id, member.id()).await?;
+					remove_member(&server_id, author.id.to_string()).await?;
 					break;
 				},
 				Element::Reply(text) => {
