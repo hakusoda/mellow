@@ -64,14 +64,21 @@ pub async fn remove_member(guild_id: impl Into<String>, user_id: impl Into<Strin
 #[derive(Serialize, Deserialize)]
 pub struct ChannelMessage {
 	pub embeds: Option<Vec<Embed>>,
-	pub content: Option<String>
+	pub content: Option<String>,
+	pub message_reference: Option<MessageReference>
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct MessageReference {
+	pub message_id: String
 }
 
 impl Default for ChannelMessage {
 	fn default() -> Self {
 		Self {
 			embeds: None,
-			content: None
+			content: None,
+			message_reference: None
 		}
 	}
 }

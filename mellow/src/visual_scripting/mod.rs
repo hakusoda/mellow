@@ -16,7 +16,9 @@ pub struct Document {
 #[derive(Eq, Hash, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum DocumentKind {
 	#[serde(rename = "mellow.discord_event.member_join")]
-	MemberJoinEvent
+	MemberJoinEvent,
+	#[serde(rename = "mellow.discord_event.message_create")]
+	MessageCreatedEvent
 }
 
 impl ToString for DocumentKind {
@@ -37,6 +39,10 @@ pub enum Element {
 	BanMember,
 	#[serde(rename = "action.mellow.member.kick")]
 	KickMember,
+	#[serde(rename = "action.mellow.reply")]
+	Reply(Text),
+	#[serde(rename = "action.mellow.reply_ephemerally")]
+	ReplyEphemerally,
 
 	#[serde(rename = "no_op.comment")]
 	Comment,
@@ -48,6 +54,11 @@ pub enum Element {
 
 	#[serde(rename = "statement.if")]
 	IfStatement(ConditionalStatement)
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct Text {
+	pub text: String
 }
 
 #[derive(Clone, Debug, Deserialize)]
