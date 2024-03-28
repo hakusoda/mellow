@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use futures_util::Stream;
+use futures::Stream;
 
 use super::{ Element, StatementCondition, ConditionalStatementBlock };
 

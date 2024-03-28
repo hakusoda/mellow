@@ -1,10 +1,13 @@
 use serde::{ Serialize, Deserialize };
+use tracing::{ Instrument, info_span };
 
 use crate::{
+	cache::CACHES,
 	discord::{ DiscordMember, ChannelMessage, create_channel_message },
 	syncing::{ RoleChange, NicknameChange, RoleChangeKind },
 	database::{ Server, UserConnection },
 	interaction::{ Embed, EmbedField, EmbedAuthor },
+	visual_scripting::Document,
 	Result
 };
 
@@ -27,7 +30,9 @@ pub struct ActionLog {
 	pub author: ActionLogAuthor,
 	pub server_id: String,
 	pub target_action: Option<IdentifiedObject>,
-	pub target_webhook: Option<IdentifiedObject>
+	pub target_webhook: Option<IdentifiedObject>,
+	#[serde(skip_serializing)]
+	pub target_document: Option<Document>
 }
 
 #[derive(Deserialize, Serialize)]
@@ -145,6 +150,13 @@ impl Server {
 					match log {
 						ServerLog::ActionLog(payload) => {
 							let website_url = format!("https://hakumi.cafe/mellow/server/{}/settings/action_log", self.id);
+							if let Some(document) = payload.target_document.clone() {
+								let cache_key = (self.id.clone(), document.kind.clone());
+								let span = info_span!("cache.event_responses.write", ?cache_key);
+								CACHES.event_responses.insert(cache_key, document)
+									.instrument(span)
+									.await;
+							}
 
 							let mut details: Vec<String> = vec![];
 							if payload.kind == "mellow.server.syncing.action.created" {

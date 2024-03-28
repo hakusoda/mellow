@@ -1,9 +1,11 @@
 use serde::{ de::Deserializer, Serialize, Deserialize };
+use tracing::{ Instrument, info_span };
 use once_cell::sync::Lazy;
 use postgrest::Postgrest;
 use serde_repr::*;
 use crate::{
-	visual_scripting,
+	cache::CACHES,
+	visual_scripting::{ Document, DocumentKind },
 	Result
 };
 
@@ -215,20 +217,34 @@ pub async fn get_server(id: impl Into<String>) -> Result<Server> {
 	)?)
 }
 
-pub async fn get_server_event_response_tree(server_id: impl Into<String>, kind: visual_scripting::DocumentKind) -> Result<visual_scripting::Document> {
-	let kind = serde_json::to_string(&kind).unwrap();
-	let kind = kind.chars().skip(1);
-	Ok(serde_json::from_str(&DATABASE.from("visual_scripting_documents")
-		.select("id,name,kind,definition")
-		.eq("kind", kind.clone().take(kind.count() - 1).collect::<String>())
-		.eq("mellow_server_id", server_id.into())
-		.limit(1)
-		.single()
-		.execute()
-		.await?
-		.text()
-		.await?
-	)?)
+pub async fn get_server_event_response_tree(server_id: impl Into<String>, kind: DocumentKind) -> Result<Document> {
+	let server_id = server_id.into();
+	let cache_key = (server_id.clone(), kind.clone());
+	Ok(match CACHES.event_responses.get(&cache_key)
+		.instrument(info_span!("cache.event_responses.read", ?cache_key))
+		.await {
+			Some(x) => x,
+			None => {
+				let document: Document = serde_json::from_str(&DATABASE.from("visual_scripting_documents")
+					.select("id,name,kind,definition")
+					.eq("kind", kind.to_string())
+					.eq("mellow_server_id", server_id)
+					.limit(1)
+					.single()
+					.execute()
+					.await?
+					.text()
+					.await?
+				)?;
+				let span = info_span!("cache.event_responses.write", ?cache_key);
+				CACHES.event_responses.insert(cache_key, document.clone())
+					.instrument(span)
+					.await;
+
+				document
+			}
+		}
+	)
 }
 
 pub async fn server_exists(id: impl Into<String>) -> Result<bool> {

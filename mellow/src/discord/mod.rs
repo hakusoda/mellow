@@ -1,7 +1,9 @@
 use serde::{ Serialize, Deserialize };
 use reqwest::Method;
+use tracing::{info_span, Instrument};
 
 use crate::{
+	cache::CACHES,
 	fetch::{ get_json, post_json, fetch_json, patch_json },
 	interaction::{ Embed, InteractionResponseData },
 	Result
@@ -86,7 +88,22 @@ pub struct DiscordGuild {
 }
 
 pub async fn get_guild(guild_id: impl Into<String>) -> Result<DiscordGuild> {
-	get_json(format!("https://discord.com/api/v10/guilds/{}", guild_id.into()), None).await
+	let guild_id = guild_id.into();
+	Ok(match CACHES.discord_guilds.get(&guild_id)
+		.instrument(info_span!("cache.discord_guilds.read", ?guild_id))
+		.await {
+			Some(x) => x,
+			None => {
+				let guild: DiscordGuild = get_json(format!("https://discord.com/api/v10/guilds/{}", &guild_id), None).await?;
+				let span = info_span!("cache.discord_guilds.write", ?guild_id);
+				CACHES.discord_guilds.insert(guild_id, guild.clone())
+					.instrument(span)
+					.await;
+
+				guild
+			}
+		}
+	)
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

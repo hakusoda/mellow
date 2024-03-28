@@ -20,7 +20,7 @@ pub const CLIENT: Lazy<Client> = Lazy::new(||
 		.unwrap()
 );
 
-#[tracing::instrument]
+#[tracing::instrument(skip(body, headers))]
 pub async fn fetch_json<U: IntoUrl + Debug, T: DeserializeOwned>(url: U, method: Option<Method>, body: Option<serde_json::Value>, headers: Option<HeaderMap>) -> Result<T> {
 	let url = url.into_url()?;
 	let mut builder = CLIENT.request(method.unwrap_or(Method::GET), url.clone());

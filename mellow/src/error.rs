@@ -18,7 +18,13 @@ pub enum ErrorKind {
 	JsonError(#[from] serde_json::Error),
 
 	#[error("Signature Error: {0}")]
-	SignatureError(#[from] ed25519_dalek::SignatureError)
+	SignatureError(#[from] ed25519_dalek::SignatureError),
+
+	#[error("System Time Error: {0}")]
+	SystemTimeError(#[from] std::time::SystemTimeError),
+
+	#[error("Unknown Error")]
+	Unknown
 }
 
 #[derive(Debug)]

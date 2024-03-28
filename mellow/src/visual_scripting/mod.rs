@@ -6,17 +6,26 @@ pub use stream::ElementStream;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct Document {
-	//pub id: String,
+	//pub id: Uuid,
 	pub name: String,
-	//pub kind: DocumentKind,
+	pub kind: DocumentKind,
 	pub definition: Vec<Element>
 }
 
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Eq, Hash, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum DocumentKind {
 	#[serde(rename = "mellow.discord_event.member_join")]
 	MemberJoinEvent
+}
+
+impl ToString for DocumentKind {
+	fn to_string(&self) -> String {
+		// how silly is this? how silly? AHHHHHHHhhhhhh
+		let string = serde_json::to_string(self).unwrap();
+		let chars = string.chars().skip(1);
+		chars.clone().take(chars.count() - 1).collect()
+	}
 }
 
 #[derive(Clone, Debug, Deserialize)]

@@ -5,7 +5,7 @@ use tokio::sync::RwLock;
 use async_recursion::async_recursion;
 
 use crate::{
-	patreon::EnumToBeNamed,
+	patreon::UserIdentityField,
 	database::{ get_server, ProfileSyncAction, ProfileSyncActionKind, ProfileSyncActionRequirementKind, ProfileSyncActionRequirementsKind, Server, User, UserConnection, UserConnectionKind, UserResponse, DATABASE }, discord::{ get_guild_roles, modify_member, DiscordMember, DiscordModifyMemberPayload, DiscordRole }, roblox::get_user_group_roles, Result
 };
 
@@ -80,7 +80,7 @@ pub async fn get_connection_metadata(users: &[UserResponse], server: &Server) ->
 							if let Some(included) = data.included {
 								for membership in included {
 									match membership {
-										EnumToBeNamed::Member(member) => patreon_pledges.push(PatreonPledge {
+										UserIdentityField::Member(member) => patreon_pledges.push(PatreonPledge {
 											tiers: member.relationships.currently_entitled_tiers.data.0.iter().map(|x| x.id.clone()).collect(),
 											active: member.attributes.patron_status.is_some_and(|x| x == "active_patron"),
 											user_id: user.user.id.clone(),
