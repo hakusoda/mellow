@@ -1,18 +1,17 @@
-use std::collections::HashMap;
 use futures::Stream;
 
-use super::{ Element, StatementCondition, ConditionalStatementBlock };
+use super::{ Element, Variable, ElementKind, StatementCondition, ConditionalStatementBlock };
 
 pub struct ElementStream {
 	// would something else be better-suited for this?
 	iterator: Box<dyn Iterator<Item = Element> + Send>,
-	variables: HashMap<String, serde_json::Value>,
+	variables: Variable,
 	current_sub_stream: Option<Box<ElementStream>>,
 	current_statement_stream: Option<StatementStream>
 }
 
 impl ElementStream {
-	pub fn new(elements: Vec<Element>, variables: HashMap<String, serde_json::Value>) -> Self {
+	pub fn new(elements: Vec<Element>, variables: Variable) -> Self {
 		Self {
 			iterator: Box::new(elements.into_iter()),
 			variables,
@@ -45,8 +44,8 @@ impl ElementStream {
 					self.get_next(cx)
 				},
 				None => if let Some(item) = self.iterator.next() {
-					match item {
-						Element::IfStatement(statement) => {
+					match item.kind {
+						ElementKind::IfStatement(statement) => {
 							self.current_statement_stream = Some(StatementStream {
 								iterator: Box::new(statement.blocks.into_iter()),
 								variables: self.variables.clone()
@@ -93,9 +92,10 @@ impl ElementStream {
 }
 
 impl Stream for ElementStream {
-	type Item = Element;
+	type Item = (Element, Variable);
 	fn poll_next(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Option<Self::Item>> {
-		self.get_mut().get_next(cx)
+		let stream = self.get_mut();
+		stream.get_next(cx).map(|x| x.map(|x| (x, stream.variables.clone())))
 	}
 
 	fn size_hint(&self) -> (usize, Option<usize>) {
@@ -105,7 +105,7 @@ impl Stream for ElementStream {
 
 pub struct StatementStream {
 	iterator: Box<dyn Iterator<Item = ConditionalStatementBlock> + Send>,
-	variables: HashMap<String, serde_json::Value>
+	variables: Variable
 }
 
 impl StatementStream {
@@ -120,10 +120,10 @@ impl StatementStream {
 						if !match condition {
 							StatementCondition::Is => input_a == input_b,
 							StatementCondition::IsNot => input_a != input_b,
-							StatementCondition::Contains => input_a.as_str().unwrap().contains(input_b.as_str().unwrap()),
-							StatementCondition::DoesNotContain => input_a.as_str().unwrap().contains(input_b.as_str().unwrap()),
-							StatementCondition::StartsWith => input_a.as_str().unwrap().starts_with(input_b.as_str().unwrap()),
-							StatementCondition::EndsWith => input_a.as_str().unwrap().ends_with(input_b.as_str().unwrap())
+							StatementCondition::Contains => input_a.cast_str().contains(input_b.cast_str()),
+							StatementCondition::DoesNotContain => input_a.cast_str().contains(input_b.cast_str()),
+							StatementCondition::StartsWith => input_a.cast_str().starts_with(input_b.cast_str()),
+							StatementCondition::EndsWith => input_a.cast_str().ends_with(input_b.cast_str())
 						} {
 							return self.get_next(cx);
 						}

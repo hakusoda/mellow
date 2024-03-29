@@ -1,6 +1,7 @@
 use serde::{ Serialize, Deserialize };
 use reqwest::Method;
 use tracing::{ Instrument, info_span };
+use percent_encoding::{ NON_ALPHANUMERIC, utf8_percent_encode };
 
 use crate::{
 	cache::CACHES,
@@ -53,6 +54,10 @@ pub async fn modify_member(guild_id: String, user_id: String, payload: DiscordMo
 	patch_json(format!("https://discord.com/api/v10/guilds/{guild_id}/members/{user_id}"), payload).await
 }
 
+pub async fn assign_member_role(guild_id: impl Into<String>, user_id: impl Into<String>, role_id: impl Into<String>) -> Result<()> {
+	fetch_json(format!("https://discord.com/api/v10/guilds/{}/members/{}/roles/{}", guild_id.into(), user_id.into(), role_id.into()), Some(Method::PUT), None, None).await
+}
+
 pub async fn ban_member(guild_id: impl Into<String>, user_id: impl Into<String>) -> Result<()> {
 	fetch_json(format!("https://discord.com/api/v10/guilds/{}/bans/{}", guild_id.into(), user_id.into()), Some(Method::PUT), None, None).await
 }
@@ -85,6 +90,10 @@ impl Default for ChannelMessage {
 
 pub async fn create_channel_message(channel_id: &String, payload: ChannelMessage) -> Result<()> {
 	post_json(format!("https://discord.com/api/v10/channels/{channel_id}/messages"), payload).await
+}
+
+pub async fn create_message_reaction(channel_id: impl Into<String>, message_id: impl Into<String>, emoji: impl Into<String>) -> Result<()> {
+	fetch_json(format!("https://discord.com/api/v10/channels/{}/messages/{}/reactions/{}/@me", channel_id.into(), message_id.into(), utf8_percent_encode(&emoji.into(), NON_ALPHANUMERIC)), Some(Method::PUT), None, None).await
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -130,6 +139,10 @@ pub struct DiscordUser {
 impl DiscordUser {
 	pub fn display_name(&self) -> String {
 		self.global_name.as_ref().unwrap_or(&self.username).clone()
+	}
+
+	pub fn avatar_url(&self) -> Option<String> {
+		self.avatar.as_ref().map(|x| format!("https://cdn.discordapp.com/avatars/{}/{x}.webp", self.id))
 	}
 }
 

@@ -17,6 +17,7 @@ hex = "0.4.3"
 log = "0.4.20"
 hmac = "0.12.1"
 sha2 = "0.10.8"
+uuid = { version = "1.8.0", features = ["serde"] }
 moka = { version = "0.12.5", features = ["future"] }
 tokio = { version = "1.36.0", features = ["full"] }
 serde = { version = "1.0.197", features = ["derive"] }
@@ -39,4 +40,5 @@ tracing-error = "0.2.0"
 mellow_macros = { path = "../macros" }
 twilight-model = "0.15.4"
 async-recursion = "1.0.5"
+percent-encoding = "2.3.1"
 twilight-gateway = "0.15.4"

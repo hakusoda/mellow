@@ -55,6 +55,11 @@ pub async fn initialise() {
 					}
 				});
 			},
+			Event::MemberUpdate(event_data) => {
+				tokio::spawn(async move {
+					event_handler::member_update(&event_data).await.unwrap();
+				});
+			},
 			Event::MessageCreate(event_data) => {
 				if !event_data.author.bot {
 					tokio::spawn(async move {

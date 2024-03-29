@@ -64,3 +64,16 @@ async fn main() -> std::io::Result<()> {
 pub type BoxFuture<'a, T> = std::pin::Pin<Box<dyn std::future::Future<Output = T> + Send + 'a>>;
 
 pub use error::Result;
+
+#[macro_export]
+macro_rules! cast {
+	($target: expr, $pat: path) => {
+		{
+			if let $pat(a) = $target {
+				Some(a)
+			} else {
+				None
+			}
+		}
+	};
+}
