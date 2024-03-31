@@ -115,19 +115,27 @@ impl StatementStream {
 				let variables = &self.variables;
 
 				// TODO: return an error if the inputs can't be resolved, said error should be logged to the server if possible.
-				if let Some(input_a) = block.inputs.first().and_then(|x| x.resolve(&variables)) {
-					if let Some(input_b) = block.inputs.get(1).and_then(|x| x.resolve(&variables))  {
-						if !match condition {
-							StatementCondition::Is => input_a == input_b,
-							StatementCondition::IsNot => input_a != input_b,
-							StatementCondition::Contains => input_a.cast_str().contains(input_b.cast_str()),
-							StatementCondition::DoesNotContain => input_a.cast_str().contains(input_b.cast_str()),
-							StatementCondition::StartsWith => input_a.cast_str().starts_with(input_b.cast_str()),
-							StatementCondition::EndsWith => input_a.cast_str().ends_with(input_b.cast_str())
-						} {
-							return self.get_next(cx);
-						}
-					}
+				let input_a = block.inputs.first().and_then(|x| x.resolve(&variables));
+				let input_b = block.inputs.get(1).and_then(|x| x.resolve(&variables));
+				if !match condition {
+					StatementCondition::Is => input_a.is_some() && input_a == input_b,
+					StatementCondition::IsNot => input_a.is_some() && input_a != input_b,
+					StatementCondition::HasAnyValue => input_a.map_or(false, |x| !x.is_empty()),
+					StatementCondition::DoesNotHaveAnyValue => input_a.map_or(false, |x| x.is_empty()),
+					StatementCondition::Contains => if let Some(input_a) = input_a && let Some(input_b) = input_b {
+						input_a.contains(&input_b)
+					} else { false },
+					StatementCondition::DoesNotContain => if let Some(input_a) = input_a && let Some(input_b) = input_b {
+						!input_a.contains(&input_b)
+					} else { false },
+					StatementCondition::BeginsWith => if let Some(input_a) = input_a && let Some(input_b) = input_b {
+						input_a.starts_with(&input_b)
+					} else { false },
+					StatementCondition::EndsWith => if let Some(input_a) = input_a && let Some(input_b) = input_b {
+						input_a.ends_with(&input_b)
+					} else { false }
+				} {
+					return self.get_next(cx);
 				}
 			}
 			std::task::Poll::Ready(Some(block))

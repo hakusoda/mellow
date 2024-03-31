@@ -10,13 +10,13 @@ use crate::{
 
 pub static CACHES: Lazy<Caches> = Lazy::new(|| Caches {
 	discord_guilds: CacheBuilder::new(32)
-		.time_to_live(Duration::from_secs(3600))
+		.time_to_live(Duration::from_hours(1))
 		.build(),
 	event_responses: CacheBuilder::new(32)
-		.time_to_live(Duration::from_secs(3600))
+		.time_to_live(Duration::from_hours(1))
 		.build(),
 	patreon_user_identities: CacheBuilder::new(64)
-		.time_to_live(Duration::from_secs(300))
+		.time_to_live(Duration::from_mins(5))
 		.build()
 });
 

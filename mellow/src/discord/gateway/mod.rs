@@ -1,6 +1,11 @@
-use twilight_model::gateway::{
-	payload::outgoing::update_presence::UpdatePresencePayload,
-	presence::{ Status, Activity, ActivityType }
+use twilight_model::{
+	gateway::{
+		payload::{incoming::MemberChunk, outgoing::{
+			update_presence::UpdatePresencePayload,
+			RequestGuildMembers
+		}},
+		presence::{ Activity, ActivityType, Status }
+	}, guild::Member, id::Id
 };
 use twilight_gateway::{ Event, Shard, Config, Intents, ShardId };
 
@@ -31,6 +36,15 @@ pub async fn initialise() {
 		}.into()], false, None, Status::Online).unwrap())
 		.build();
 	let mut shard = Shard::with_config(ShardId::ONE, config);
+	while !shard.status().is_identified() {
+		shard.next_message().await.unwrap();
+	}
+
+	/*let a = RequestGuildMembers::builder(Id::new(346444423271415819))
+		.query("", Some(9660));
+
+	let mut members: Vec<Member> = vec![];
+	shard.command(&a).await.unwrap();*/
 	loop {
 		let event = match shard.next_event().await {
 			Ok(event) => event,
@@ -67,6 +81,26 @@ pub async fn initialise() {
 					});
 				}
 			},
+			/*Event::MemberChunk(event_data) => {
+				{
+					for member in event_data.members {
+						members.push(member.clone());
+					}
+				}
+				if event_data.chunk_index == event_data.chunk_count - 1 {
+					let i = members.clone();
+					tokio::spawn(async move {
+						for member in i.into_iter() {
+							if member.roles.is_empty() && !member.pending {
+								println!("giving {} the unverified role", member.user.name);
+								crate::discord::assign_member_role(event_data.guild_id.to_string(), member.user.id.to_string(), "1223305945929744424").await.unwrap();
+								tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+							}
+						}
+						println!("done");
+					});
+				}
+			},*/
 			_ => ()
 		}
 	}

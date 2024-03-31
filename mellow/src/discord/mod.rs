@@ -1,6 +1,7 @@
 use serde::{ Serialize, Deserialize };
 use reqwest::Method;
 use tracing::{ Instrument, info_span };
+use serde_repr::{ Serialize_repr, Deserialize_repr };
 use percent_encoding::{ NON_ALPHANUMERIC, utf8_percent_encode };
 
 use crate::{
@@ -96,11 +97,22 @@ pub async fn create_message_reaction(channel_id: impl Into<String>, message_id: 
 	fetch_json(format!("https://discord.com/api/v10/channels/{}/messages/{}/reactions/{}/@me", channel_id.into(), message_id.into(), utf8_percent_encode(&emoji.into(), NON_ALPHANUMERIC)), Some(Method::PUT), None, None).await
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Guild {
 	pub name: String,
 	pub icon: Option<String>,
-	pub splash: Option<String>
+	pub splash: Option<String>,
+	pub verification_level: GuildVerificationLevel
+}
+
+#[derive(Clone, Debug, Serialize_repr, Deserialize_repr)]
+#[repr(u8)]
+pub enum GuildVerificationLevel {
+	None,
+	Low,
+	Medium,
+	High,
+	VeryHigh
 }
 
 impl Guild {
@@ -155,6 +167,7 @@ pub struct DiscordMember {
 	pub roles: Vec<String>,
 	pub avatar: Option<String>,
 	pub pending: bool,
+	pub guild_id: String,
 	pub joined_at: String,
 	pub permissions: Option<String>
 }
@@ -170,7 +183,11 @@ impl DiscordMember {
 }
 
 pub async fn get_member(guild_id: impl Into<String>, user_id: impl Into<String>) -> Result<DiscordMember> {
-	get_json(format!("https://discord.com/api/v10/guilds/{}/members/{}", guild_id.into(), user_id.into()), None).await
+	let guild_id = guild_id.into();
+	let member: serde_json::Value = get_json(format!("https://discord.com/api/v10/guilds/{}/members/{}", &guild_id, user_id.into()), None).await?;
+	let mut m = crate::cast!(member, serde_json::Value::Object).unwrap();
+	m.insert("guild_id".into(), serde_json::Value::String(guild_id.into()));
+	Ok(serde_json::from_value(serde_json::Value::Object(m))?)
 }
 
 pub async fn get_members(guild_id: impl Into<String>) -> Result<Vec<DiscordMember>> {

@@ -186,7 +186,7 @@ pub async fn get_server_event_response_tree(server_id: impl Into<String>, kind: 
 			Some(x) => x,
 			None => {
 				let document: Document = serde_json::from_str(&DATABASE.from("visual_scripting_documents")
-					.select("id,name,kind,definition")
+					.select("id,name,kind,active,definition")
 					.eq("kind", kind.to_string())
 					.eq("mellow_server_id", server_id)
 					.limit(1)
