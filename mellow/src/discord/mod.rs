@@ -105,27 +105,16 @@ pub struct Guild {
 	pub verification_level: GuildVerificationLevel
 }
 
-#[derive(Clone, Debug, Serialize_repr, Deserialize_repr)]
-#[repr(u8)]
-pub enum GuildVerificationLevel {
-	None,
-	Low,
-	Medium,
-	High,
-	VeryHigh
-}
-
 impl Guild {
-	pub async fn fetch(guild_id: impl Into<String>) -> Result<Guild> {
-		let guild_id = guild_id.into();
-		Ok(match CACHES.discord_guilds.get(&guild_id)
+	pub async fn fetch(guild_id: &str) -> Result<Self> {
+		Ok(match CACHES.discord_guilds.get(guild_id)
 			.instrument(info_span!("cache.discord_guilds.read", ?guild_id))
 			.await {
 				Some(x) => x,
 				None => {
-					let guild: Guild = get_json(format!("https://discord.com/api/v10/guilds/{}", &guild_id), None).await?;
+					let guild: Guild = get_json(format!("https://discord.com/api/v10/guilds/{}", guild_id), None).await?;
 					let span = info_span!("cache.discord_guilds.write", ?guild_id);
-					CACHES.discord_guilds.insert(guild_id, guild.clone())
+					CACHES.discord_guilds.insert(guild_id.to_string(), guild.clone())
 						.instrument(span)
 						.await;
 	
@@ -134,6 +123,41 @@ impl Guild {
 			}
 		)
 	}
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct GuildOnboarding {
+	pub enabled: bool
+}
+
+impl GuildOnboarding {
+	pub async fn fetch(guild_id: &str) -> Result<Self> {
+		Ok(match CACHES.discord_guild_onboarding.get(guild_id)
+			.instrument(info_span!("cache.discord_guild_onboarding.read", ?guild_id))
+			.await {
+				Some(x) => x,
+				None => {
+					let onboarding: GuildOnboarding = get_json(format!("https://discord.com/api/v10/guilds/{}/onboarding", guild_id), None).await?;
+					let span = info_span!("cache.discord_guild_onboarding.write", ?guild_id);
+					CACHES.discord_guild_onboarding.insert(guild_id.to_string(), onboarding.clone())
+						.instrument(span)
+						.await;
+	
+					onboarding
+				}
+			}
+		)
+	}
+}
+
+#[derive(Clone, Debug, Serialize_repr, Deserialize_repr)]
+#[repr(u8)]
+pub enum GuildVerificationLevel {
+	None,
+	Low,
+	Medium,
+	High,
+	VeryHigh
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

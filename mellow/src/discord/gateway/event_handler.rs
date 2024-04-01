@@ -7,7 +7,7 @@ use crate::{
 	server::logging::{ ServerLog, ProfileSyncKind },
 	syncing::sync_single_user,
 	discord::{
-		Guild, ChannelMessage, MessageReference, GuildVerificationLevel,
+		Guild, ChannelMessage, GuildOnboarding, MessageReference, GuildVerificationLevel,
 		ban_member, get_member, remove_member, assign_member_role, create_channel_message, create_message_reaction
 	},
 	database,
@@ -20,13 +20,17 @@ pub async fn process_element_for_member(element: &Element, variables: &Variable,
 	Ok(match &element.kind {
 		ElementKind::BanMember(reference) => {
 			if let Some(member) = reference.resolve(&variables){
-				ban_member(member.get("guild_id").cast_str(), member.get("id").cast_str()).await?;
+				let user_id = member.get("id").cast_str();
+				ban_member(member.get("guild_id").cast_str(), user_id).await?;
+				tracker.banned_member(user_id);
 				true
 			} else { false }
 		},
 		ElementKind::KickMember(reference) => {
 			if let Some(member) = reference.resolve(&variables) {
-				remove_member(member.get("guild_id").cast_str(), member.get("id").cast_str()).await?;
+				let user_id = member.get("id").cast_str();
+				remove_member(member.get("guild_id").cast_str(), user_id).await?;
+				tracker.kicked_member(user_id);
 				true
 			} else { false }
 		},
@@ -45,7 +49,6 @@ pub async fn process_element_for_member(element: &Element, variables: &Variable,
 static PENDING_MEMBERS: RwLock<Vec<(String, String)>> = RwLock::const_new(vec![]);
 
 pub async fn member_add(event_data: &MemberAdd) -> Result<()> {
-	println!("{event_data:?}");
 	let user_id = event_data.user.id.to_string();
 	let server_id = event_data.guild_id.to_string();
 	if event_data.member.pending {
@@ -79,6 +82,7 @@ pub async fn member_add(event_data: &MemberAdd) -> Result<()> {
 					_ => ()
 				}
 			}
+			tracker.send_logs(server_id).await?;
 		}
 	}
 
@@ -86,7 +90,6 @@ pub async fn member_add(event_data: &MemberAdd) -> Result<()> {
 }
 
 pub async fn member_update(event_data: &MemberUpdate) -> Result<()> {
-	println!("{event_data:?}");
 	if !event_data.pending {
 		let key = (event_data.guild_id.to_string(), event_data.user.id.to_string());
 		let pending = &PENDING_MEMBERS;
@@ -97,15 +100,16 @@ pub async fn member_update(event_data: &MemberUpdate) -> Result<()> {
 			let user_id = event_data.user.id.to_string();
 			let server_id = event_data.guild_id.to_string();
 			if event_data.roles.is_empty() {
-				let guild = Guild::fetch(&server_id).await?;
-				match guild.verification_level {
-					GuildVerificationLevel::None |
-					GuildVerificationLevel::Low |
-					GuildVerificationLevel::Medium => (),
-					_ => {
-						PENDING_VERIFICATION_TIMER.write().await.push((server_id.clone(), user_id.clone(), SystemTime::now()));
-						println!("added user to PENDING_VERIFICATION_TIMER");
-						return Ok(());
+				let onboarding = GuildOnboarding::fetch(&server_id).await?;
+				if !onboarding.enabled {
+					let guild = Guild::fetch(&server_id).await?;
+					match guild.verification_level {
+						GuildVerificationLevel::High => {
+							PENDING_VERIFICATION_TIMER.write().await.push((server_id.clone(), user_id.clone(), SystemTime::now()));
+							println!("added user to PENDING_VERIFICATION_TIMER");
+							return Ok(());
+						},
+						_ => ()
 					}
 				}
 			}
@@ -118,6 +122,7 @@ pub async fn member_update(event_data: &MemberUpdate) -> Result<()> {
 				while let Some((element, variables)) = stream.next().await {
 					if process_element_for_member(&element, &variables, &mut tracker).await? { break }
 				}
+				tracker.send_logs(server_id).await?;
 			}
 		}
 	}
@@ -157,6 +162,7 @@ pub async fn message_create(event_data: &MessageCreate) -> Result<()> {
 				_ => ()
 			}
 		}
+		tracker.send_logs(server_id).await?;
 	}
 
 	Ok(())

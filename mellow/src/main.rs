@@ -82,7 +82,7 @@ async fn spawn_onboarding_job(stop_signal: CancellationToken) {
 	loop {
 		if let Ok(mut entries) = PENDING_VERIFICATION_TIMER.try_write() {
 			entries.retain(|x| {
-				if x.2.elapsed().unwrap() >= Duration::from_mins(10) {
+				if x.2.elapsed().unwrap() >= Duration::from_secs(20) {
 					println!("!!!!!!!!! timer over for {x:?}");
 					let user_id = x.1.clone();
 					let server_id = x.0.clone();
@@ -96,6 +96,7 @@ async fn spawn_onboarding_job(stop_signal: CancellationToken) {
 							while let Some((element, variables)) = stream.next().await {
 								if process_element_for_member(&element, &variables, &mut tracker).await.unwrap() { break }
 							}
+							tracker.send_logs(server_id).await.unwrap();
 						}
 					});
 					false

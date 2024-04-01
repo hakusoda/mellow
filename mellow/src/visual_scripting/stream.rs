@@ -1,6 +1,6 @@
 use futures::Stream;
 
-use super::{ Element, Variable, ElementKind, StatementCondition, ConditionalStatementBlock };
+use super::{ Element, Variable, Condition, ElementKind, StatementBlock, StatementConditionKind };
 
 pub struct ElementStream {
 	// would something else be better-suited for this?
@@ -104,47 +104,66 @@ impl Stream for ElementStream {
 }
 
 pub struct StatementStream {
-	iterator: Box<dyn Iterator<Item = ConditionalStatementBlock> + Send>,
+	iterator: Box<dyn Iterator<Item = StatementBlock> + Send>,
 	variables: Variable
 }
 
 impl StatementStream {
-	fn get_next(&mut self, cx: &mut std::task::Context<'_>) -> std::task::Poll<Option<ConditionalStatementBlock>> {
+	fn get_next(&mut self, cx: &mut std::task::Context<'_>) -> std::task::Poll<Option<StatementBlock>> {
 		if let Some(block) = self.iterator.next() {
-			if let Some(condition) = &block.condition {
+			let mut last_value = false;
+			for condition in block.conditions.iter() {
 				let variables = &self.variables;
 
 				// TODO: return an error if the inputs can't be resolved, said error should be logged to the server if possible.
-				let input_a = block.inputs.first().and_then(|x| x.resolve(&variables));
-				let input_b = block.inputs.get(1).and_then(|x| x.resolve(&variables));
-				if !match condition {
-					StatementCondition::Is => input_a.is_some() && input_a == input_b,
-					StatementCondition::IsNot => input_a.is_some() && input_a != input_b,
-					StatementCondition::HasAnyValue => input_a.map_or(false, |x| !x.is_empty()),
-					StatementCondition::DoesNotHaveAnyValue => input_a.map_or(false, |x| x.is_empty()),
-					StatementCondition::Contains => if let Some(input_a) = input_a && let Some(input_b) = input_b {
+				let input_a = condition.inputs.first().and_then(|x| x.resolve(&variables));
+				let input_b = condition.inputs.get(1).and_then(|x| x.resolve(&variables));
+				let value = match condition.condition {
+					Condition::Is => input_a.is_some() && input_a == input_b,
+					Condition::IsNot => input_a.is_some() && input_a != input_b,
+					Condition::HasAnyValue => input_a.map_or(false, |x| !x.is_empty()),
+					Condition::DoesNotHaveAnyValue => input_a.map_or(false, |x| x.is_empty()),
+					Condition::Contains => if let Some(input_a) = input_a && let Some(input_b) = input_b {
 						input_a.contains(&input_b)
 					} else { false },
-					StatementCondition::DoesNotContain => if let Some(input_a) = input_a && let Some(input_b) = input_b {
+					Condition::ContainsOnly => if let Some(input_a) = input_a && let Some(input_b) = input_b {
+						input_a.contains_only(&input_b)
+					} else { false },
+					Condition::DoesNotContain => if let Some(input_a) = input_a && let Some(input_b) = input_b {
 						!input_a.contains(&input_b)
 					} else { false },
-					StatementCondition::BeginsWith => if let Some(input_a) = input_a && let Some(input_b) = input_b {
+					Condition::BeginsWith => if let Some(input_a) = input_a && let Some(input_b) = input_b {
 						input_a.starts_with(&input_b)
 					} else { false },
-					StatementCondition::EndsWith => if let Some(input_a) = input_a && let Some(input_b) = input_b {
+					Condition::EndsWith => if let Some(input_a) = input_a && let Some(input_b) = input_b {
 						input_a.ends_with(&input_b)
 					} else { false }
-				} {
-					return self.get_next(cx);
+				};
+				match condition.kind {
+					StatementConditionKind::Initial => (),
+					StatementConditionKind::And => if !last_value {
+						break;
+					},
+					StatementConditionKind::Or => if last_value {
+						break;
+					}
 				}
+				last_value = value;
 			}
-			std::task::Poll::Ready(Some(block))
+			if last_value {
+				loop {
+					if self.iterator.next().is_none() {
+						break;
+					}
+				}
+				std::task::Poll::Ready(Some(block))
+			} else { self.get_next(cx) }
 		} else { std::task::Poll::Ready(None) }
 	}
 }
 
 impl Stream for StatementStream {
-	type Item = ConditionalStatementBlock;
+	type Item = StatementBlock;
 	fn poll_next(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Option<Self::Item>> {
 		self.get_mut().get_next(cx)
 	}

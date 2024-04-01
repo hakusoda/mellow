@@ -5,10 +5,11 @@ use super::{ action_log::ActionLog, Server };
 use crate::{
 	util::unwrap_string_or_array,
 	cache::CACHES,
-	discord::{ DiscordMember, ChannelMessage, create_channel_message },
 	syncing::{ RoleChange, RoleChangeKind, NicknameChange },
+	discord::{ DiscordMember, ChannelMessage, create_channel_message },
 	database::UserConnection,
 	interaction::{ Embed, EmbedField, EmbedAuthor },
+	visual_scripting::ActionTrackerItem,
 	Result
 };
 
@@ -37,7 +38,11 @@ pub enum ServerLog {
 	VisualScriptingProcessorError {
 		error: String,
 		document_name: String
-	} = 1 << 4
+	} = 1 << 4,
+	VisualScriptingDocumentResult {
+		items: Vec<ActionTrackerItem>,
+		document_name: String
+	} = 1 << 5
 }
 
 #[derive(Deserialize, Serialize)]
@@ -63,7 +68,7 @@ impl Server {
 			let mut embeds: Vec<Embed> = vec![];
 			for log in logs {
 				let value = log.discriminant();
-				if value == 4 || value == 8 || value == 16 || (self.logging_types & value) == value {
+				if value == 4 || value == 8 || value == 16 || value == 32 || (self.logging_types & value) == value {
 					match log {
 						ServerLog::ActionLog(payload) => {
 							let website_url = format!("https://hakumi.cafe/mellow/server/{}/settings/action_log", self.id);
@@ -168,6 +173,25 @@ impl Server {
 							embeds.push(Embed {
 								title: Some(format!("The Visual Scripting Document named “{document_name}” encountered an error while being processed, tragic...")),
 								description: Some(error),
+								..Default::default()
+							});
+						},
+						ServerLog::VisualScriptingDocumentResult { items, document_name } => {
+							embeds.push(Embed {
+								title: Some(format!("Result for <:document:1222904218499940395> {document_name}")),
+								description: Some(items
+									.into_iter()
+									.map(|x| match x {
+										ActionTrackerItem::AssignedMemberRole(user_id, role_id) =>
+											format!("* Assigned <@&{role_id}> to <@{user_id}>"),
+										ActionTrackerItem::BannedMember(user_id) =>
+											format!("* Banned <@{user_id}> from the server"),
+										ActionTrackerItem::KickedMember(user_id) =>
+											format!("* Kicked <@{user_id}> from the server")
+									})
+									.collect::<Vec<String>>()
+									.join("\n")
+								),
 								..Default::default()
 							});
 						}

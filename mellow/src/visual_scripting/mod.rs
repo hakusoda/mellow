@@ -1,7 +1,14 @@
 use std::collections::HashMap;
 use serde::{ Serialize, Deserialize };
 
-use crate::discord::DiscordMember;
+use crate::{
+	server::{
+		logging::ServerLog,
+		Server
+	},
+	discord::DiscordMember,
+	Result
+};
 
 pub mod stream;
 pub use stream::ElementStream;
@@ -17,7 +24,7 @@ pub struct Document {
 
 impl Document {
 	pub fn into_stream(self, variables: Variable) -> (ElementStream, ActionTracker) {
-		(ElementStream::new(self.definition, variables), ActionTracker::new())
+		(ElementStream::new(self.definition, variables), ActionTracker::new(self.name))
 	}
 
 	pub fn is_ready_for_stream(&self) -> bool {
@@ -96,19 +103,33 @@ pub struct Text {
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct ConditionalStatement {
-	pub blocks: Vec<ConditionalStatementBlock>
+	pub blocks: Vec<StatementBlock>
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub struct ConditionalStatementBlock {
+pub struct StatementBlock {
 	pub items: Vec<Element>,
+	pub conditions: Vec<StatementCondition>
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct StatementCondition {
+	pub kind: StatementConditionKind,
 	pub inputs: Vec<StatementInput>,
-	pub condition: Option<StatementCondition>
+	pub condition: Condition
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StatementConditionKind {
+	Initial,
+	And,
+	Or
 }
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "kind")]
-pub enum StatementCondition {
+pub enum Condition {
 	#[serde(rename = "generic.is")]
 	Is,
 	#[serde(rename = "generic.is_not")]
@@ -120,6 +141,8 @@ pub enum StatementCondition {
 	DoesNotHaveAnyValue,
 	#[serde(rename = "iterable.contains")]
 	Contains,
+	#[serde(rename = "iterable.contains_only")]
+	ContainsOnly,
 	#[serde(rename = "iterable.does_not_contain")]
 	DoesNotContain,
 	#[serde(rename = "iterable.begins_with")]
@@ -138,12 +161,19 @@ pub enum StatementInput {
 impl StatementInput {
 	fn resolve(&self, root_variable: &Variable) -> Option<Variable> {
 		match self {
-			StatementInput::Match(value) => Some(match value {
-				serde_json::Value::String(x) => VariableKind::String(x.clone()).into(),
-				_ => unimplemented!()
-			}),
+			StatementInput::Match(value) => Some(value.into()),
 			StatementInput::Variable(reference) => reference.resolve(&root_variable)
 		}
+	}
+}
+
+impl Into<Variable> for &serde_json::Value {
+	fn into(self) -> Variable {
+		match self {
+			serde_json::Value::Array(x) => VariableKind::List(x.iter().map(|x| x.into()).collect()),
+			serde_json::Value::String(x) => VariableKind::String(x.clone()),
+			_ => unimplemented!()
+		}.into()
 	}
 }
 
@@ -222,6 +252,18 @@ impl Variable {
 			VariableKind::Map(x) => x.iter().any(|x| x.1 == variable),
 			VariableKind::List(x) => x.iter().any(|x| x == variable),
 			VariableKind::String(x) => x.contains(variable.cast_str())
+		}
+	}
+
+	pub fn contains_only(&self, variable: &Variable) -> bool {
+		match &self.kind {
+			VariableKind::Map(_) => false,
+			VariableKind::List(x) => match &variable.kind {
+				VariableKind::Map(_) => false,
+				VariableKind::List(y) => x.iter().all(|x| y.iter().any(|y| x == y)),
+				VariableKind::String(_) => false
+			},
+			VariableKind::String(_) => false
 		}
 	}
 
@@ -324,21 +366,45 @@ impl VariableReference {
 }
 
 pub struct ActionTracker {
-	items: Vec<ActionTrackerItem>
+	items: Vec<ActionTrackerItem>,
+	document_name: String
 }
 
 impl ActionTracker {
-	pub fn new() -> Self {
+	pub fn new(document_name: String) -> Self {
 		Self {
-			items: vec![]
+			items: vec![],
+			document_name
 		}
+	}
+
+	pub async fn send_logs(self, server_id: String) -> Result<()> {
+		if !self.items.is_empty() {
+			let server = Server::fetch(server_id).await?;
+			server.send_logs(vec![ServerLog::VisualScriptingDocumentResult {
+				items: self.items,
+				document_name: self.document_name
+			}]).await?;
+		}
+		Ok(())
 	}
 
 	pub fn assigned_member_role(&mut self, user_id: impl ToString, role_id: impl ToString) {
 		self.items.push(ActionTrackerItem::AssignedMemberRole(user_id.to_string(), role_id.to_string()));
 	}
+
+	pub fn banned_member(&mut self, user_id: impl ToString) {
+		self.items.push(ActionTrackerItem::BannedMember(user_id.to_string()));
+	}
+
+	pub fn kicked_member(&mut self, user_id: impl ToString) {
+		self.items.push(ActionTrackerItem::KickedMember(user_id.to_string()));
+	}
 }
 
+#[derive(Serialize, Deserialize)]
 pub enum ActionTrackerItem {
-	AssignedMemberRole(String, String)
+	AssignedMemberRole(String, String),
+	BannedMember(String),
+	KickedMember(String)
 }
