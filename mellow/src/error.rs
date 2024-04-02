@@ -23,6 +23,9 @@ pub enum ErrorKind {
 	#[error("System Time Error: {0}")]
 	SystemTimeError(#[from] std::time::SystemTimeError),
 
+	#[error("Integer Parsing Error: {0}")]
+	ParseIntegerError(#[from] std::num::ParseIntError),
+
 	#[error("Unknown Error")]
 	Unknown
 }

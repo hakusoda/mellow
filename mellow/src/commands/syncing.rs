@@ -1,12 +1,16 @@
 use tokio::time;
 use mellow_macros::command;
+use twilight_model::id::{
+	marker::GuildMarker,
+	Id
+};
 
 use crate::{
 	server::{
 		logging::{ ServerLog, ProfileSyncKind },
 		Server
 	},
-	discord::{ DiscordMember, get_members, edit_original_response },
+	discord::{ GuildMember, get_members, edit_original_response },
 	syncing::{
 		sign_ups::create_sign_up,
 		RoleChangeKind, SyncMemberResult,
@@ -18,8 +22,8 @@ use crate::{
 };
 
 #[tracing::instrument]
-pub async fn sync_with_token(user: UserResponse, member: DiscordMember, guild_id: &String, interaction_token: &String, is_onboarding: bool) -> Result<SyncMemberResult> {
-	let result = sync_single_user(&user, &member, guild_id, None).await?;
+pub async fn sync_with_token(user: UserResponse, member: GuildMember, guild_id: &Id<GuildMarker>, interaction_token: &String, is_onboarding: bool) -> Result<SyncMemberResult> {
+	let result = sync_single_user(&user, &member, &guild_id, None).await?;
 	let mut fields = vec![];
 	if let Some(changes) = &result.nickname_change {
 		fields.push(EmbedField {
@@ -50,7 +54,7 @@ pub async fn sync_with_token(user: UserResponse, member: DiscordMember, guild_id
 				..Default::default()
 			}
 		]) } else { None },
-		content: Some(format!("{}{}\n\n[<:personbadge:1219233857786875925>  Change Connections](https://hakumi.cafe/mellow/server/{}/user_settings)  • [<:personraisedhand:1219234152709095424> Get Support](https://discord.com/invite/rs3r4dQu9P)", if result.profile_changed {
+		content: Some(format!("{}{}\n\n[<:gear_fill:1224667889592700950>  Edit Server Settings](https://hakumi.cafe/mellow/server/{}/user_settings)  • [<:personraisedhand:1219234152709095424> Get Support](https://discord.com/invite/rs3r4dQu9P)", if result.profile_changed {
 			format!("## <:check2circle:1219235152580837419>  Server Profile has been updated.\n{}",
 				if result.role_changes.is_empty() { "" } else { "Your roles have been updated." }
 			)
@@ -88,16 +92,17 @@ pub async fn sync_with_token(user: UserResponse, member: DiscordMember, guild_id
 #[tracing::instrument]
 #[command(no_dm, description = "Sync your server profile. (may contain traces of burgers)")]
 pub async fn sync(interaction: InteractionPayload) -> Result<SlashResponse> {
-	let guild_id = interaction.guild_id.clone().unwrap();
+	let guild_id = Id::new(interaction.guild_id.clone().unwrap().parse()?);
+
 	let member = interaction.member.unwrap();
-	if let Some(user) = get_user_by_discord(member.id(), &guild_id).await? {
+	if let Some(user) = get_user_by_discord(&guild_id, member.id()).await? {
 		return Ok(SlashResponse::defer(interaction.token.clone(), Box::pin(async move {
 			sync_with_token(user, member, &guild_id, &interaction.token, false).await?;
 			Ok(())
 		})));
 	}
 
-	create_sign_up(member.id(), guild_id, interaction.token).await;
+	create_sign_up(guild_id, *member.id(), interaction.token).await;
 	Ok(SlashResponse::Message {
 		flags: Some(64),
 		content: Some(format!("## Hello, welcome to the server!\nYou appear to be new to mellow, this server uses mellow to sync member profiles with external services, such as Roblox.\nIf you would like to continue, please continue [here](https://discord.com/api/oauth2/authorize?client_id=1068554282481229885&redirect_uri=https%3A%2F%2Fapi.hakumi.cafe%2Fv0%2Fauth%2Fcallback%2Fmellow&response_type=code&scope=identify&state=sync.{}), don't worry, it shouldn't take long!", interaction.guild_id.unwrap()))
@@ -114,7 +119,7 @@ pub async fn forcesyncall(interaction: InteractionPayload) -> Result<SlashRespon
 		let server = Server::fetch(&guild_id).await?;
 		let members = get_members(&guild_id).await?;
 		
-		let users = get_users_by_discord(members.iter().map(|x| x.id()).collect(), guild_id).await?;
+		let users = get_users_by_discord(&Id::new(guild_id.parse()?), members.iter().map(|x| x.id()).collect()).await?;
 		let metadata = get_connection_metadata(&users, &server).await?;
 
 		let mut logs: Vec<ServerLog> = vec![];
@@ -123,7 +128,8 @@ pub async fn forcesyncall(interaction: InteractionPayload) -> Result<SlashRespon
 
 		let mut guild_roles = None;
 		for member in members {
-			let result = sync_member(users.iter().find(|x| x.sub == member.id()).map(|x| &x.user), &member, &server, &metadata, &mut guild_roles).await?;
+			let string_id = member.id().to_string();
+			let result = sync_member(users.iter().find(|x| x.sub == string_id).map(|x| &x.user), &member, &server, &metadata, &mut guild_roles).await?;
 			if result.profile_changed {
 				// sleep for one second to avoid hitting Discord ratelimit
 				time::sleep(time::Duration::from_secs(1)).await;

@@ -3,6 +3,11 @@ use tracing::{ Instrument, info_span };
 use once_cell::sync::Lazy;
 use postgrest::Postgrest;
 use serde_repr::*;
+use twilight_model::id::{
+	marker::{ UserMarker, GuildMarker },
+	Id
+};
+
 use crate::{
 	cache::CACHES,
 	server::ServerSettings,
@@ -93,15 +98,15 @@ pub struct UserResponse {
 	pub user: User
 }
 
-pub async fn get_user_by_discord(id: impl Into<String>, server_id: impl Into<String>) -> Result<Option<UserResponse>> {
-	Ok(get_users_by_discord(vec![id.into()], server_id).await?.into_iter().next())
+pub async fn get_user_by_discord(guild_id: &Id<GuildMarker>, user_id: &Id<UserMarker>) -> Result<Option<UserResponse>> {
+	Ok(get_users_by_discord(guild_id, vec![user_id]).await?.into_iter().next())
 }
 
-pub async fn get_users_by_discord(ids: Vec<String>, server_id: impl Into<String>) -> Result<Vec<UserResponse>> {
+pub async fn get_users_by_discord(guild_id: &Id<GuildMarker>, user_ids: Vec<&Id<UserMarker>>) -> Result<Vec<UserResponse>> {
 	Ok(serde_json::from_str(&DATABASE.from("user_connections")
 		.select("sub,user:users(id,server_settings:mellow_user_server_settings(user_connections),connections:user_connections(id,sub,type,username,display_name,oauth_authorisations:user_connection_oauth_authorisations(token_type,expires_at,access_token,refresh_token)))")
-		.in_("sub", ids)
-		.eq("users.mellow_user_server_settings.server_id", server_id.into())
+		.in_("sub", user_ids.into_iter().map(|x| x.to_string()))
+		.eq("users.mellow_user_server_settings.server_id", guild_id.to_string())
 		.execute().await?.text().await?
 	)?)
 }
@@ -177,9 +182,8 @@ pub enum ProfileSyncActionRequirementsKind {
 	MeetOne
 }
 
-pub async fn get_server_event_response_tree(server_id: impl Into<String>, kind: DocumentKind) -> Result<Document> {
-	let server_id = server_id.into();
-	let cache_key = (server_id.clone(), kind.clone());
+pub async fn get_server_event_response_tree(guild_id: &Id<GuildMarker>, kind: DocumentKind) -> Result<Document> {
+	let cache_key = (guild_id.clone(), kind.clone());
 	Ok(match CACHES.event_responses.get(&cache_key)
 		.instrument(info_span!("cache.event_responses.read", ?cache_key))
 		.await {
@@ -188,7 +192,7 @@ pub async fn get_server_event_response_tree(server_id: impl Into<String>, kind: 
 				let document: Document = serde_json::from_str(&DATABASE.from("visual_scripting_documents")
 					.select("id,name,kind,active,definition")
 					.eq("kind", kind.to_string())
-					.eq("mellow_server_id", server_id)
+					.eq("mellow_server_id", guild_id.to_string())
 					.limit(1)
 					.single()
 					.execute()

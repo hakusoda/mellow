@@ -1,11 +1,21 @@
 use std::collections::HashMap;
 use serde::{ Serialize, Deserialize };
+use twilight_model::id::{
+	marker::GuildMarker,
+	Id
+};
 use async_recursion::async_recursion;
 
 use crate::{
 	server::Server,
+	roblox::get_user_group_roles,
 	patreon::UserIdentityField,
-	database::{ ProfileSyncAction, ProfileSyncActionKind, ProfileSyncActionRequirementKind, ProfileSyncActionRequirementsKind, User, UserConnection, UserConnectionKind, UserResponse, DATABASE }, discord::{ get_guild_roles, modify_member, DiscordMember, DiscordModifyMemberPayload, DiscordRole }, roblox::get_user_group_roles, Result
+	discord::{ DiscordRole, GuildMember, DiscordModifyMemberPayload, modify_member, get_guild_roles },
+	database::{
+		User, UserResponse, ProfileSyncAction, ProfileSyncActionKind, ProfileSyncActionRequirementKind, ProfileSyncActionRequirementsKind, UserConnection, UserConnectionKind,
+		DATABASE
+	},
+	Result
 };
 
 pub mod sign_ups;
@@ -133,8 +143,8 @@ async fn get_role_name(id: String, guild_id: impl Into<String>, roles: &mut Opti
 	return Ok(items.iter().find(|x| x.id == id).map_or("unknown role".into(), |x| x.name.clone()));
 }
 
-pub async fn sync_single_user(user: &UserResponse, member: &DiscordMember, guild_id: impl Into<String>, connection_metadata: Option<ConnectionMetadata>) -> Result<SyncMemberResult> {
-	let server = Server::fetch(guild_id).await?;
+pub async fn sync_single_user(user: &UserResponse, member: &GuildMember, guild_id: &Id<GuildMarker>, connection_metadata: Option<ConnectionMetadata>) -> Result<SyncMemberResult> {
+	let server = Server::fetch(guild_id.to_string()).await?;
 	let metadata = match connection_metadata {
 		Some(x) => x,
 		None => get_connection_metadata(&vec![user.clone()], &server).await?
@@ -142,7 +152,7 @@ pub async fn sync_single_user(user: &UserResponse, member: &DiscordMember, guild
 	sync_member(Some(&user.user), &member, &server, &metadata, &mut None).await
 }
 
-pub async fn sync_member(user: Option<&User>, member: &DiscordMember, server: &Server, connection_metadata: &ConnectionMetadata, guild_roles: &mut Option<Vec<DiscordRole>>) -> Result<SyncMemberResult> {
+pub async fn sync_member(user: Option<&User>, member: &GuildMember, server: &Server, connection_metadata: &ConnectionMetadata, guild_roles: &mut Option<Vec<DiscordRole>>) -> Result<SyncMemberResult> {
 	let mut roles = member.roles.clone();
 	let mut role_changes: Vec<RoleChange> = vec![];
 	let mut requirement_cache: HashMap<String, bool> = HashMap::new();
@@ -203,7 +213,7 @@ pub async fn sync_member(user: Option<&User>, member: &DiscordMember, server: &S
 	
 	let profile_changed = !role_changes.is_empty() || nickname_change.is_some();
 	if profile_changed {
-		modify_member(server.id.clone(), member.id(), DiscordModifyMemberPayload {
+		modify_member(server.id.clone(), member.id().to_string(), DiscordModifyMemberPayload {
 			nick: target_nickname,
 			roles: Some(roles),
 			..Default::default()

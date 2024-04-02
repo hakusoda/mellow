@@ -1,12 +1,16 @@
 use std::collections::HashMap;
 use serde::{ Serialize, Deserialize };
+use twilight_model::id::{
+	marker::GuildMarker,
+	Id
+};
 
 use crate::{
 	server::{
 		logging::ServerLog,
 		Server
 	},
-	discord::DiscordMember,
+	discord::GuildMember,
 	Result
 };
 
@@ -76,6 +80,8 @@ pub enum ElementKind {
 	Reply(StringValueWithVariableReference),
 	#[serde(rename = "action.mellow.message.reaction.create")]
 	AddReaction(StringValueWithVariableReference),
+	#[serde(rename = "action.mellow.message.delete")]
+	DeleteMessage(VariableReference),
 
 	#[serde(rename = "no_op.comment")]
 	Comment,
@@ -293,15 +299,21 @@ impl Into<Variable> for String {
 	}
 }
 
-impl Into<Variable> for DiscordMember {
+impl<T> Into<Variable> for &Id<T> {
 	fn into(self) -> Variable {
+		self.to_string().into()
+	}
+}
+
+impl GuildMember {
+	pub fn into_variable(&self, server_id: &Id<GuildMarker>) -> Variable {
 		Variable::create_map([
-			("id", VariableKind::String(self.id()).into()),
+			("id", self.id().into()),
 			("roles", VariableKind::List(self.roles.iter().map(|x| x.clone().into()).collect()).into()),
-			("guild_id", VariableKind::String(self.guild_id.clone()).into()),
-			("username", VariableKind::String(self.user.username.clone()).into()),
-			("avatar_url", VariableKind::String(self.user.avatar_url().unwrap_or("".into())).into()),
-			("display_name", VariableKind::String(self.display_name()).into())
+			("guild_id", server_id.to_string().into()),
+			("username", self.user.username.clone().into()),
+			("avatar_url", self.user.avatar_url().unwrap_or("".into()).into()),
+			("display_name", self.display_name().into())
 		], Some(VariableInterpretAs::Member))
 	}
 }
@@ -309,10 +321,23 @@ impl Into<Variable> for DiscordMember {
 impl Into<Variable> for twilight_model::user::User {
 	fn into(self) -> Variable {
 		Variable::create_map([
-			("id", VariableKind::String(self.id.to_string()).into()),
-			("username", VariableKind::String(self.name.clone()).into()),
-			("avatar_url", VariableKind::String(self.avatar.map(|x| format!("https://cdn.discordapp.com/avatars/{}/{x}.webp", self.id)).unwrap_or("".into())).into()),
-			("display_name", VariableKind::String(self.global_name.unwrap_or(self.name)).into())
+			("id", self.id.to_string().into()),
+			("username", self.name.clone().into()),
+			("avatar_url", self.avatar.map(|x| format!("https://cdn.discordapp.com/avatars/{}/{x}.webp", self.id)).unwrap_or("".into()).into()),
+			("display_name", self.global_name.unwrap_or(self.name).into())
+		], Some(VariableInterpretAs::Member))
+	}
+}
+
+impl Variable {
+	pub fn from_partial_member(user: &twilight_model::user::User, member: &twilight_model::guild::PartialMember, guild_id: &Id<GuildMarker>) -> Variable {
+		Variable::create_map([
+			("id", user.id.to_string().into()),
+			("roles", VariableKind::List(member.roles.iter().map(|x| x.to_string().into()).collect()).into()),
+			("guild_id", guild_id.to_string().into()),
+			("username", user.name.clone().into()),
+			("avatar_url", member.avatar.map(|x| format!("https://cdn.discordapp.com/avatars/{}/{x}.webp", user.id)).unwrap_or("".into()).into()),
+			("display_name", user.global_name.clone().unwrap_or_else(|| user.name.clone()).into())
 		], Some(VariableInterpretAs::Member))
 	}
 }
@@ -320,9 +345,10 @@ impl Into<Variable> for twilight_model::user::User {
 impl Into<Variable> for &twilight_model::gateway::payload::incoming::MessageCreate {
 	fn into(self) -> Variable {
 		Variable::create_map([
-			("id", VariableKind::String(self.id.to_string()).into()),
-			("content", VariableKind::String(self.content.clone()).into()),
-			("channel_id", VariableKind::String(self.channel_id.to_string()).into())
+			("id", self.id.to_string().into()),
+			("author", self.author.clone().into()),
+			("content", self.content.clone().into()),
+			("channel_id", self.channel_id.to_string().into())
 		], Some(VariableInterpretAs::Message))
 	}
 }
@@ -330,12 +356,12 @@ impl Into<Variable> for &twilight_model::gateway::payload::incoming::MessageCrea
 impl Into<Variable> for &twilight_model::gateway::payload::incoming::MemberUpdate {
 	fn into(self) -> Variable {
 		Variable::create_map([
-			("id", VariableKind::String(self.user.id.to_string()).into()),
+			("id", self.user.id.to_string().into()),
 			("roles", VariableKind::List(self.roles.iter().map(|x| x.to_string().into()).collect()).into()),
-			("guild_id", VariableKind::String(self.guild_id.to_string()).into()),
-			("username", VariableKind::String(self.user.name.clone()).into()),
-			("avatar_url", VariableKind::String(self.avatar.or(self.user.avatar).map(|x| format!("https://cdn.discordapp.com/avatars/{}/{x}.webp", self.user.id)).unwrap_or("".into())).into()),
-			("display_name", VariableKind::String(self.user.global_name.clone().unwrap_or_else(|| self.user.name.clone())).into())
+			("guild_id", self.guild_id.to_string().into()),
+			("username", self.user.name.clone().into()),
+			("avatar_url", self.avatar.or(self.user.avatar).map(|x| format!("https://cdn.discordapp.com/avatars/{}/{x}.webp", self.user.id)).unwrap_or("".into()).into()),
+			("display_name", self.user.global_name.clone().unwrap_or_else(|| self.user.name.clone()).into())
 		], Some(VariableInterpretAs::Member))
 	}
 }
@@ -378,9 +404,9 @@ impl ActionTracker {
 		}
 	}
 
-	pub async fn send_logs(self, server_id: String) -> Result<()> {
+	pub async fn send_logs(self, guild_id: &Id<GuildMarker>) -> Result<()> {
 		if !self.items.is_empty() {
-			let server = Server::fetch(server_id).await?;
+			let server = Server::fetch(guild_id.to_string()).await?;
 			server.send_logs(vec![ServerLog::VisualScriptingDocumentResult {
 				items: self.items,
 				document_name: self.document_name
@@ -400,11 +426,16 @@ impl ActionTracker {
 	pub fn kicked_member(&mut self, user_id: impl ToString) {
 		self.items.push(ActionTrackerItem::KickedMember(user_id.to_string()));
 	}
+
+	pub fn deleted_message(&mut self, channel_id: impl ToString, user_id: impl ToString) {
+		self.items.push(ActionTrackerItem::DeletedMessage(channel_id.to_string(), user_id.to_string()));
+	}
 }
 
 #[derive(Serialize, Deserialize)]
 pub enum ActionTrackerItem {
 	AssignedMemberRole(String, String),
 	BannedMember(String),
-	KickedMember(String)
+	KickedMember(String),
+	DeletedMessage(String, String)
 }

@@ -4,7 +4,7 @@ use serde_repr::*;
 
 use crate::{
 	http::{ ApiError, ApiResult },
-	discord::DiscordMember,
+	discord::GuildMember,
 	commands::COMMANDS,
 	SlashResponse
 };
@@ -41,7 +41,7 @@ pub struct InteractionPayload {
 	pub kind: InteractionKind,
 	pub data: Option<ApplicationCommandData>,
 	pub token: String,
-	pub member: Option<DiscordMember>,
+	pub member: Option<GuildMember>,
 	pub guild_id: Option<String>
 }
 

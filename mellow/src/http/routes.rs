@@ -7,6 +7,10 @@ use actix_web::{
 	get, web, post
 };
 use ed25519_dalek::{ Verifier, Signature, VerifyingKey };
+use twilight_model::id::{
+	marker::{ UserMarker, GuildMarker },
+	Id
+};
 
 use super::{ ApiError, ApiResult };
 use crate::{
@@ -16,14 +20,20 @@ use crate::{
 		action_log::ActionLog,
 		Server
 	},
-	discord::{ APP_ID, get_member },
+	discord::{ GuildMember, APP_ID },
 	syncing::{
 		sign_ups::SIGN_UPS,
 		PatreonPledge, SyncMemberResult, ConnectionMetadata,
 		sync_single_user
 	},
-	database,
-	commands::COMMANDS,
+	database::{
+		UserConnectionKind,
+		self
+	},
+	commands::{
+		syncing::sync_with_token,
+		COMMANDS
+	},
 	interaction,
 	Result
 };
@@ -82,23 +92,23 @@ struct SyncMemberPayload {
 }
 
 #[post("/server/{server_id}/member/{user_id}/sync")]
-async fn sync_member(request: HttpRequest, body: web::Json<SyncMemberPayload>, path: web::Path<(String, String)>) -> ApiResult<web::Json<SyncMemberResult>> {
+async fn sync_member(request: HttpRequest, body: web::Json<SyncMemberPayload>, path: web::Path<(Id<GuildMarker>, Id<UserMarker>)>) -> ApiResult<web::Json<SyncMemberResult>> {
 	// TODO: make this... easier on the eyes.
 	if request.headers().get("x-api-key").map_or(false, |x| x.to_str().unwrap() == API_KEY.to_string()) {
-		let (server_id, user_id) = path.into_inner();
-		if let Some(user) = database::get_user_by_discord(&user_id, &server_id).await? {
-			let member = get_member(&server_id, &user_id).await?;
+		let (guild_id, user_id) = path.into_inner();
+		if let Some(user) = database::get_user_by_discord(&guild_id, &user_id).await? {
+			let member = GuildMember::fetch(&guild_id, &user_id).await?;
 			return Ok(web::Json(if let Some(token) = &body.webhook_token {
-				crate::commands::syncing::sync_with_token(user, member, &server_id, &token, false).await?
+				sync_with_token(user, member, &guild_id, &token, false).await?
 			} else if body.is_sign_up.is_some_and(|x| x) {
-				let result = if let Some(item) = SIGN_UPS.read().await.iter().find(|x| x.user_id == user_id && x.guild_id == server_id) {
-					Some(crate::commands::syncing::sync_with_token(user, member, &server_id, &item.interaction_token, true).await?)
+				let result = if let Some(item) = SIGN_UPS.read().await.iter().find(|x| x.user_id == user_id && x.guild_id == guild_id) {
+					Some(sync_with_token(user, member, &guild_id, &item.interaction_token, true).await?)
 				} else { None };
 				SIGN_UPS.write().await.retain(|x| x.user_id != user_id);
 
 				return result.map(|x| web::Json(x)).ok_or(ApiError::SignUpNotFound);
 			} else {
-				sync_single_user(&user, &member, server_id, None).await?
+				sync_single_user(&user, &member, &guild_id, None).await?
 			}));
 		}
 		Err(ApiError::UserNotFound)
@@ -161,10 +171,11 @@ async fn patreon_webhook(body: String) -> ApiResult<HttpResponse> {
 	).map_err(|_| ApiError::GenericInvalidRequest)?;
 
 	let user_id = &payload.data.relationships.user.data.id;
-	let server_id = response.get("server_id").unwrap().as_str().unwrap();
-	if let Some(user) = database::get_user_by_discord(user_id, server_id).await? {
-		let member = get_member(server_id, user_id).await?;
-		sync_single_user(&user, &member, server_id, Some(ConnectionMetadata {
+	let guild_id: Id<GuildMarker> = serde_json::from_value(response.get("server_id").unwrap().clone())
+		.map_err(|_| ApiError::GenericInvalidRequest)?;
+	if let Some(user) = database::get_user_by_discord(&guild_id, &Id::new(user_id.parse().map_err(|_| ApiError::GenericInvalidRequest)?)).await? {
+		let member = GuildMember::fetch(&guild_id, &Id::new(user.user.connections.iter().find(|x| matches!(x.kind, UserConnectionKind::Discord)).unwrap().id.parse().map_err(|_| ApiError::GenericInvalidRequest)?)).await?;
+		sync_single_user(&user, &member, &guild_id, Some(ConnectionMetadata {
 			patreon_pledges: vec![PatreonPledge {
 				tiers: payload.data.relationships.currently_entitled_tiers.data.iter().map(|x| x.id.clone()).collect(),
 				active: payload.data.attributes.patron_status.map_or(false, |x| x == "active_patron"),

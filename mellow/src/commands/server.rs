@@ -1,4 +1,5 @@
 use mellow_macros::command;
+use twilight_model::id::Id;
 
 use crate::{
 	Result,
@@ -17,7 +18,7 @@ pub async fn setup(interaction: InteractionPayload) -> Result<SlashResponse> {
 			content: Some(format!("## Server already connected\nThis server is already connected to mellow, view it [here](https://hakumi.cafe/mellow/server/{guild_id})."))
 		}
 	} else {
-		if let Some(user) = get_user_by_discord(interaction.member.unwrap().id(), guild_id.clone()).await? {
+		if let Some(user) = get_user_by_discord(&Id::new(guild_id.parse()?), interaction.member.unwrap().id()).await? {
 			SlashResponse::defer(interaction.token.clone(), Box::pin(async move {
 				let guild = Guild::fetch(&guild_id).await.unwrap();
 				DATABASE.from("mellow_servers")
@@ -28,10 +29,10 @@ pub async fn setup(interaction: InteractionPayload) -> Result<SlashResponse> {
 						"avatar_url": "https://cdn.discordapp.com/icons/{guild_id}/{}.webp",
 						"banner_url": {},
 						"owner_user_id": "{}"
-					}}"#, guild.name, user.user.id, guild.icon.unwrap_or("".into()), user.user.id, match guild.splash {
+					}}"#, guild.name, user.user.id, guild.icon.unwrap_or("".into()), match guild.splash {
 						Some(x) => format!("\"https://cdn.discordapp.com/splashes/{guild_id}/{x}.webp?size=1032\""),
 						None => "null".into()
-					}))
+					}, user.user.id))
 					.execute()
 					.await?;
 

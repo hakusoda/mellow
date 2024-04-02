@@ -2,6 +2,10 @@ use serde::{ Serialize, Deserialize };
 use reqwest::Method;
 use tracing::{ Instrument, info_span };
 use serde_repr::{ Serialize_repr, Deserialize_repr };
+use twilight_model::id::{
+	marker::{ UserMarker, GuildMarker },
+	Id
+};
 use percent_encoding::{ NON_ALPHANUMERIC, utf8_percent_encode };
 
 use crate::{
@@ -97,6 +101,10 @@ pub async fn create_message_reaction(channel_id: impl Into<String>, message_id: 
 	fetch_json(format!("https://discord.com/api/v10/channels/{}/messages/{}/reactions/{}/@me", channel_id.into(), message_id.into(), utf8_percent_encode(&emoji.into(), NON_ALPHANUMERIC)), Some(Method::PUT), None, None).await
 }
 
+pub async fn delete_message(channel_id: impl Into<String>, message_id: impl Into<String>) -> Result<()> {
+	fetch_json(format!("https://discord.com/api/v10/channels/{}/messages/{}", channel_id.into(), message_id.into()), Some(Method::DELETE), None, None).await
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Guild {
 	pub name: String,
@@ -162,7 +170,7 @@ pub enum GuildVerificationLevel {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct DiscordUser {
-	pub id: String,
+	pub id: Id<UserMarker>,
 	pub bot: Option<bool>,
 	pub avatar: Option<String>,
 	pub username: String,
@@ -183,7 +191,7 @@ impl DiscordUser {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct DiscordMember {
+pub struct GuildMember {
 	pub deaf: bool,
 	pub mute: bool,
 	pub nick: Option<String>,
@@ -191,14 +199,17 @@ pub struct DiscordMember {
 	pub roles: Vec<String>,
 	pub avatar: Option<String>,
 	pub pending: bool,
-	pub guild_id: String,
 	pub joined_at: String,
 	pub permissions: Option<String>
 }
 
-impl DiscordMember {
-	pub fn id(&self) -> String {
-		self.user.id.clone()
+impl GuildMember {
+	pub async fn fetch(guild_id: &Id<GuildMarker>, user_id: &Id<UserMarker>) -> Result<Self> {
+		get_json(format!("https://discord.com/api/v10/guilds/{}/members/{}", guild_id, user_id), None).await
+	}
+
+	pub fn id(&self) -> &Id<UserMarker> {
+		&self.user.id
 	}
 
 	pub fn display_name(&self) -> String {
@@ -206,15 +217,7 @@ impl DiscordMember {
 	}
 }
 
-pub async fn get_member(guild_id: impl Into<String>, user_id: impl Into<String>) -> Result<DiscordMember> {
-	let guild_id = guild_id.into();
-	let member: serde_json::Value = get_json(format!("https://discord.com/api/v10/guilds/{}/members/{}", &guild_id, user_id.into()), None).await?;
-	let mut m = crate::cast!(member, serde_json::Value::Object).unwrap();
-	m.insert("guild_id".into(), serde_json::Value::String(guild_id.into()));
-	Ok(serde_json::from_value(serde_json::Value::Object(m))?)
-}
-
-pub async fn get_members(guild_id: impl Into<String>) -> Result<Vec<DiscordMember>> {
+pub async fn get_members(guild_id: impl Into<String>) -> Result<Vec<GuildMember>> {
 	get_json(format!("https://discord.com/api/v10/guilds/{}/members?limit=100", guild_id.into()), None).await
 }
 

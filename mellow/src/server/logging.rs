@@ -1,12 +1,13 @@
 use serde::{ Serialize, Deserialize };
-use tracing::{ Instrument, info_span};
+use tracing::{ Instrument, info_span };
+use twilight_model::id::Id;
 
 use super::{ action_log::ActionLog, Server };
 use crate::{
 	util::unwrap_string_or_array,
 	cache::CACHES,
 	syncing::{ RoleChange, RoleChangeKind, NicknameChange },
-	discord::{ DiscordMember, ChannelMessage, create_channel_message },
+	discord::{ GuildMember, ChannelMessage, create_channel_message },
 	database::UserConnection,
 	interaction::{ Embed, EmbedField, EmbedAuthor },
 	visual_scripting::ActionTrackerItem,
@@ -21,17 +22,17 @@ pub enum ServerLog {
 	ServerProfileSync {
 		#[serde(skip)]
 		kind: ProfileSyncKind,
-		member: DiscordMember,
-		forced_by: Option<DiscordMember>,
+		member: GuildMember,
+		forced_by: Option<GuildMember>,
 		role_changes: Vec<RoleChange>,
 		nickname_change: Option<NicknameChange>,
 		relevant_connections: Vec<UserConnection>
 	} = 1 << 1,
 	UserCompletedOnboarding {
-		member: DiscordMember
+		member: GuildMember
 	} = 1 << 2,
 	EventResponseResult {
-		invoker: DiscordMember,
+		invoker: GuildMember,
 		event_kind: String,
 		member_result: EventResponseResultMemberResult
 	} = 1 << 3,
@@ -73,7 +74,7 @@ impl Server {
 						ServerLog::ActionLog(payload) => {
 							let website_url = format!("https://hakumi.cafe/mellow/server/{}/settings/action_log", self.id);
 							if let Some(document) = payload.target_document.clone() {
-								let cache_key = (self.id.clone(), document.kind.clone());
+								let cache_key = (Id::new(self.id.parse()?), document.kind.clone());
 								let span = info_span!("cache.event_responses.write", ?cache_key);
 								CACHES.event_responses.insert(cache_key, document)
 									.instrument(span)
@@ -187,7 +188,9 @@ impl Server {
 										ActionTrackerItem::BannedMember(user_id) =>
 											format!("* Banned <@{user_id}> from the server"),
 										ActionTrackerItem::KickedMember(user_id) =>
-											format!("* Kicked <@{user_id}> from the server")
+											format!("* Kicked <@{user_id}> from the server"),
+										ActionTrackerItem::DeletedMessage(channel_id, user_id) =>
+											format!("* Deleted a message in <#{channel_id}> by <@{user_id}>")
 									})
 									.collect::<Vec<String>>()
 									.join("\n")
@@ -212,7 +215,7 @@ impl Server {
 		Ok(())
 	}
 
-	fn embed_author(&self, member: &DiscordMember, title: Option<String>) -> EmbedAuthor {
+	fn embed_author(&self, member: &GuildMember, title: Option<String>) -> EmbedAuthor {
 		EmbedAuthor {
 			url: Some(format!("https://hakumi.cafe/mellow/server/{}/member/{}", self.id, member.id())),
 			name: title.or(member.user.global_name.clone()),
