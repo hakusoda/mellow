@@ -5,6 +5,7 @@ use crate::{
 	cache::CACHES,
 	fetch::get_json,
 	database::UserConnectionOAuthAuthorisation,
+	visual_scripting::{ Variable, VariableKind },
 	Result
 };
 
@@ -74,6 +75,69 @@ pub async fn get_user_memberships(oauth_authorisation: &UserConnectionOAuthAutho
 					.await;
 
 				identity
+			}
+		}
+	)
+}
+
+#[derive(Clone)]
+pub struct Campaign2 {
+	pub tiers: Vec<Tier2>
+}
+
+impl Into<Variable> for Campaign2 {
+	fn into(self) -> Variable {
+		Variable::create_map([
+			("tiers", VariableKind::List(self.tiers.into_iter().map(|x| Variable::create_map([
+				("patron_count", x.patron_count.into())
+			], None)).collect()).into())
+		], None)
+	}
+}
+
+#[derive(Clone)]
+pub struct Tier2 {
+	pub patron_count: u64
+}
+
+#[derive(Deserialize)]
+struct GetCampaign {
+	included: Vec<IncludedItem>
+}
+
+#[derive(Deserialize)]
+struct IncludedItem {
+	attributes: IncludedItemAttributes
+}
+
+#[derive(Deserialize)]
+struct IncludedItemAttributes {
+	patron_count: u64
+}
+
+pub async fn get_campaign(oauth_authorisation: &UserConnectionOAuthAuthorisation) -> Result<Campaign2> {
+	let access_token = &oauth_authorisation.access_token;
+	Ok(match CACHES.patreon_campaigns.get(access_token)
+		.instrument(info_span!("cache.patreon_campaigns.read", ?access_token))
+		.await {
+			Some(x) => x,
+			None => {
+				let mut headers = reqwest::header::HeaderMap::new();
+				headers.insert("authorization", format!("{} {}", oauth_authorisation.token_type, access_token).parse().unwrap());
+
+				let campaign: GetCampaign = get_json("https://www.patreon.com/api/oauth2/v2/campaigns?include=tiers&fields%5Btier%5D=patron_count", Some(headers)).await?;
+				
+				let span = info_span!("cache.patreon_campaigns.write", ?access_token);
+				let mapped = Campaign2 {
+					tiers: campaign.included.into_iter().map(|x| Tier2 {
+						patron_count: x.attributes.patron_count
+					}).collect()
+				};
+				CACHES.patreon_campaigns.insert(access_token.clone(), mapped.clone())
+					.instrument(span)
+					.await;
+
+				mapped
 			}
 		}
 	)

@@ -1,4 +1,7 @@
-use std::time::SystemTime;
+use std::{
+	sync::Arc,
+	time::SystemTime
+};
 use tokio::sync::RwLock;
 use tokio_stream::StreamExt;
 use twilight_model::{
@@ -22,10 +25,10 @@ use crate::{
 	PENDING_VERIFICATION_TIMER
 };
 
-pub async fn process_element_for_member(element: &Element, variables: &Variable, tracker: &mut ActionTracker) -> Result<bool> {
+pub async fn process_element_for_member(element: &Element, variables: &Arc<RwLock<Variable>>, tracker: &mut ActionTracker) -> Result<bool> {
 	Ok(match &element.kind {
 		ElementKind::BanMember(reference) => {
-			if let Some(member) = reference.resolve(&variables){
+			if let Some(member) = reference.resolve(&*variables.read().await){
 				let user_id = member.get("id").cast_str();
 				ban_member(member.get("guild_id").cast_str(), user_id).await?;
 				tracker.banned_member(user_id);
@@ -33,7 +36,7 @@ pub async fn process_element_for_member(element: &Element, variables: &Variable,
 			} else { false }
 		},
 		ElementKind::KickMember(reference) => {
-			if let Some(member) = reference.resolve(&variables) {
+			if let Some(member) = reference.resolve(&*variables.read().await) {
 				let user_id = member.get("id").cast_str();
 				remove_member(member.get("guild_id").cast_str(), user_id).await?;
 				tracker.kicked_member(user_id);
@@ -41,7 +44,7 @@ pub async fn process_element_for_member(element: &Element, variables: &Variable,
 			} else { false }
 		},
 		ElementKind::AssignRoleToMember(data) => {
-			if let Some(member) = data.reference.resolve(&variables) {
+			if let Some(member) = data.reference.resolve(&*variables.read().await) {
 				let user_id = member.get("id").cast_str();
 				assign_member_role(member.get("guild_id").cast_str(), user_id, &data.value).await?;
 				tracker.assigned_member_role(user_id, &data.value);
@@ -148,7 +151,7 @@ pub async fn message_create(event_data: &MessageCreate) -> Result<()> {
 				if process_element_for_member(&element, &variables, &mut tracker).await? { break }
 				match element.kind {
 					ElementKind::Reply(data) => {
-						if let Some(message) = data.reference.resolve(&variables) {
+						if let Some(message) = data.reference.resolve(&*variables.read().await) {
 							create_channel_message(&event_data.channel_id.to_string(), ChannelMessage {
 								content: Some(data.value),
 								message_reference: Some(MessageReference {
@@ -159,12 +162,12 @@ pub async fn message_create(event_data: &MessageCreate) -> Result<()> {
 						}
 					},
 					ElementKind::AddReaction(data) => {
-						if let Some(message) = data.reference.resolve(&variables) {
+						if let Some(message) = data.reference.resolve(&*variables.read().await) {
 							create_message_reaction(message.get("channel_id").cast_str(), message.get("id").cast_str(), data.value).await?;
 						}
 					},
 					ElementKind::DeleteMessage(data) => {
-						if let Some(message) = data.resolve(&variables) {
+						if let Some(message) = data.resolve(&*variables.read().await) {
 							let channel_id = message.get("channel_id").cast_str();
 							delete_message(channel_id, message.get("id").cast_str()).await?;
 							tracker.deleted_message(channel_id, message.get("author").get("id").cast_str());

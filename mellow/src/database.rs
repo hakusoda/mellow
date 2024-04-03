@@ -211,6 +211,42 @@ pub async fn get_server_event_response_tree(guild_id: &Id<GuildMarker>, kind: Do
 	)
 }
 
+#[derive(Clone, Deserialize)]
+pub struct ServerCommand {
+	pub document: Document
+}
+
+impl ServerCommand {
+	pub async fn fetch(guild_id: &Id<GuildMarker>, command_name: String) -> Result<Self> {
+		let cache_key = (guild_id.clone(), command_name);
+		Ok(match CACHES.server_commands.get(&cache_key)
+			.instrument(info_span!("cache.server_commands.read", ?cache_key))
+			.await {
+				Some(x) => x,
+				None => {
+					let command: Self = serde_json::from_str(&DATABASE.from("mellow_server_slash_commands")
+						.select("document:visual_scripting_documents(name,kind,active,definition)")
+						.eq("name", &cache_key.1)
+						.eq("server_id", guild_id.to_string())
+						.limit(1)
+						.single()
+						.execute()
+						.await?
+						.text()
+						.await?
+					)?;
+					let span = info_span!("cache.server_commands.write", ?cache_key);
+					CACHES.server_commands.insert(cache_key, command.clone())
+						.instrument(span)
+						.await;
+	
+					command
+				}
+			}
+		)
+	}
+}
+
 pub async fn server_exists(id: impl Into<String>) -> Result<bool> {
 	// this isn't an ideal method, but this rust library is way too limited, especially when compared to postgrest-js...
 	Ok(DATABASE.from("mellow_servers")

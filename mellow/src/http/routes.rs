@@ -82,7 +82,7 @@ async fn interactions(request: HttpRequest, body: String) -> ApiResult<web::Json
 	if let Err(_) = verify_interaction_body(&body, signature, timestamp) {
 		return Err(ApiError::InvalidSignature);
 	}
-    interaction::handle_request(body).await
+    interaction::handle_request(body).await.map_err(|x| { println!("{x}"); x })
 }
 
 #[derive(Deserialize)]
@@ -191,19 +191,16 @@ async fn patreon_webhook(body: String) -> ApiResult<HttpResponse> {
 }
 
 fn absolutesolver(request: &HttpRequest, body: impl ToString) -> Result<()> {
-	let mut mac = HmacSha256::new_from_slice(ABSOLUTESOLVER)
-		.map_err(|_| ApiError::InternalError)?;
+	let mut mac = HmacSha256::new_from_slice(ABSOLUTESOLVER)?;
 	mac.update(body.to_string().as_bytes());
 
 	Ok(mac.verify_slice(
 		request.headers()
 			.get("absolutesolver")
-			.ok_or(ApiError::InvalidSignature)
-			.map(|x| hex::decode(x))?
-			.map_err(|_| ApiError::InvalidSignature)?
+			.map(|x| hex::decode(x))
+			.unwrap()?
 			.as_slice()
-	)
-		.map_err(|_| ApiError::InvalidSignature)?)
+	)?)
 }
 
 #[derive(Serialize)]

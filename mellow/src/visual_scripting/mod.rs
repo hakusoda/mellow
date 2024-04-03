@@ -39,6 +39,9 @@ impl Document {
 
 #[derive(Eq, Hash, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum DocumentKind {
+	#[serde(rename = "mellow.command")]
+	MellowCommand,
+
 	#[serde(rename = "mellow.discord_event.member_join")]
 	MemberJoinEvent,
 	#[serde(rename = "mellow.discord_event.message_create")]
@@ -83,6 +86,12 @@ pub enum ElementKind {
 	#[serde(rename = "action.mellow.message.delete")]
 	DeleteMessage(VariableReference),
 
+	#[serde(rename = "action.mellow.interaction.reply")]
+	InteractionReply(Text),
+
+	#[serde(rename = "get_data.mellow.server.current_patreon_campaign")]
+	GetLinkedPatreonCampaign,
+
 	#[serde(rename = "no_op.comment")]
 	Comment,
 	#[serde(rename = "no_op.nothing")]
@@ -104,7 +113,23 @@ pub struct StringValueWithVariableReference {
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct Text {
-	//pub text: String
+	pub value: Vec<TextElement>
+}
+
+impl Text {
+	pub fn resolve(self, root_variable: &Variable) -> String {
+		self.value.into_iter().map(|x| match x {
+			TextElement::String(x) => x,
+			TextElement::Variable(x) => x.resolve(root_variable).unwrap().cast_string()
+		}).collect::<Vec<String>>().join("")
+	}
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
+pub enum TextElement {
+	String(String),
+	Variable(VariableReference)
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -193,7 +218,9 @@ pub struct Variable {
 pub enum VariableKind {
 	Map(HashMap<String, Variable>),
 	List(Vec<Variable>),
-	String(String)
+
+	String(String),
+	UnsignedInteger(u64)
 }
 
 impl Into<Variable> for VariableKind {
@@ -231,8 +258,19 @@ impl Variable {
 		self.as_map().unwrap().get(key).unwrap()
 	}
 
+	pub fn set(&mut self, key: &str, value: Variable) {
+		self.as_map_mut().unwrap().insert(key.into(), value);
+	}
+
 	pub fn as_map(&self) -> Option<&HashMap<String, Variable>> {
 		match &self.kind {
+			VariableKind::Map(x) => Some(x),
+			_ => None
+		}
+	}
+
+	pub fn as_map_mut(&mut self) -> Option<&mut HashMap<String, Variable>> {
+		match &mut self.kind {
 			VariableKind::Map(x) => Some(x),
 			_ => None
 		}
@@ -245,11 +283,20 @@ impl Variable {
 		}
 	}
 
+	pub fn cast_string(&self) -> String {
+		match &self.kind {
+			VariableKind::String(x) => x.clone(),
+			VariableKind::UnsignedInteger(x) => x.to_string(),
+			_ => panic!()
+		}
+	}
+
 	pub fn is_empty(&self) -> bool {
 		match &self.kind {
 			VariableKind::Map(x) => x.is_empty(),
 			VariableKind::List(x) => x.is_empty(),
-			VariableKind::String(x) => x.is_empty()
+			VariableKind::String(x) => x.is_empty(),
+			VariableKind::UnsignedInteger(_) => false
 		}
 	}
 
@@ -257,35 +304,34 @@ impl Variable {
 		match &self.kind {
 			VariableKind::Map(x) => x.iter().any(|x| x.1 == variable),
 			VariableKind::List(x) => x.iter().any(|x| x == variable),
-			VariableKind::String(x) => x.contains(variable.cast_str())
+			VariableKind::String(x) => x.contains(variable.cast_str()),
+			VariableKind::UnsignedInteger(_) => false
 		}
 	}
 
 	pub fn contains_only(&self, variable: &Variable) -> bool {
 		match &self.kind {
-			VariableKind::Map(_) => false,
 			VariableKind::List(x) => match &variable.kind {
-				VariableKind::Map(_) => false,
 				VariableKind::List(y) => x.iter().all(|x| y.iter().any(|y| x == y)),
-				VariableKind::String(_) => false
+				_ => false
 			},
-			VariableKind::String(_) => false
+			_ => false
 		}
 	}
 
 	pub fn starts_with(&self, variable: &Variable) -> bool {
 		match &self.kind {
-			VariableKind::Map(_) => false,
 			VariableKind::List(x) => x.first().is_some_and(|x| x == variable),
-			VariableKind::String(x) => x.starts_with(variable.cast_str())
+			VariableKind::String(x) => x.starts_with(variable.cast_str()),
+			_ => false
 		}
 	}
 
 	pub fn ends_with(&self, variable: &Variable) -> bool {
 		match &self.kind {
-			VariableKind::Map(_) => false,
 			VariableKind::List(x) => x.last().is_some_and(|x| x == variable),
-			VariableKind::String(x) => x.ends_with(variable.cast_str())
+			VariableKind::String(x) => x.ends_with(variable.cast_str()),
+			_ => false
 		}
 	}
 }
@@ -294,6 +340,15 @@ impl Into<Variable> for String {
 	fn into(self) -> Variable {
 		Variable {
 			kind: VariableKind::String(self),
+			interpret_as: VariableInterpretAs::NonSpecific
+		}
+	}
+}
+
+impl Into<Variable> for u64 {
+	fn into(self) -> Variable {
+		Variable {
+			kind: VariableKind::UnsignedInteger(self),
 			interpret_as: VariableInterpretAs::NonSpecific
 		}
 	}
@@ -380,6 +435,10 @@ impl VariableReference {
 				_ => root_variable
 			}.kind {
 				VariableKind::Map(map) => match map.get(key) {
+					Some(x) => x,
+					_ => return None
+				},
+				VariableKind::List(list) => match list.get(key.parse::<usize>().unwrap()) {
 					Some(x) => x,
 					_ => return None
 				},

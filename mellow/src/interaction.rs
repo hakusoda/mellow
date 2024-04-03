@@ -1,11 +1,19 @@
 use serde::{ Serialize, Deserialize };
 use actix_web::web::Json;
 use serde_repr::*;
+use futures_util::StreamExt;
+use twilight_model::id::{
+	marker::GuildMarker,
+	Id
+};
 
 use crate::{
 	http::{ ApiError, ApiResult },
-	discord::GuildMember,
+	server::Server,
+	discord::{ GuildMember, edit_original_response },
 	commands::COMMANDS,
+	database::ServerCommand,
+	visual_scripting::{ Variable, ElementKind },
 	SlashResponse
 };
 
@@ -22,7 +30,8 @@ pub struct ApplicationCommandData {
 	//pub id: String,
 	pub name: String,
 	//#[serde(rename = "type")]
-	//pub kind: ApplicationCommandKind
+	//pub kind: ApplicationCommandKind,
+	pub guild_id: Option<Id<GuildMarker>>
 }
 
 #[derive(Deserialize_repr, Debug)]
@@ -128,26 +137,62 @@ pub async fn handle_request(body: String) -> ApiResult<Json<InteractionResponse>
 		})),
 		InteractionKind::ApplicationCommand => {
 			if let Some(ref data) = payload.data {
-				if let Some(command) = COMMANDS.iter().find(|x| x.name == data.name) {
-					if let Some(callback) = command.slash_action {
-						return Ok(Json(match callback(payload).await.map_err(|x| { println!("{x}"); x })? {
-							SlashResponse::Message { flags, content } =>
-								InteractionResponse {
-									kind: InteractionResponseKind::ChannelMessageWithSource,
-									data: Some(InteractionResponseData::ChannelMessageWithSource {
-										flags,
-										embeds: None,
-										content
-									})
+				if let Some(guild_id) = data.guild_id {
+					let command = ServerCommand::fetch(&guild_id, data.name.clone()).await?;
+					let token = payload.token.clone();
+					let member = payload.member.clone();
+					let guild_id = guild_id.clone();
+					tokio::spawn(async move {
+						let (mut stream, mut tracker) = command.document.into_stream(Variable::create_map([
+							("member".into(), member.unwrap().into_variable(&guild_id))
+						], None));
+						while let Some((element, variables)) = stream.next().await {
+							match element.kind {
+								ElementKind::GetLinkedPatreonCampaign => {
+									let server = Server::fetch(guild_id.to_string()).await?;
+									variables.write().await.set("campaign", crate::patreon::get_campaign(server.oauth_authorisations.first().unwrap()).await?.into());
 								},
-							SlashResponse::DeferMessage =>
-								InteractionResponse {
-									kind: InteractionResponseKind::DeferredChannelMessageWithSource,
-									data: Some(InteractionResponseData::DeferredChannelMessageWithSource {
-										flags: 64
-									})
-								}
-						}));
+								ElementKind::InteractionReply(data) =>
+									edit_original_response(&token, InteractionResponseData::ChannelMessageWithSource {
+										flags: None,
+										embeds: None,
+										content: Some(data.resolve(&*variables.read().await))
+									}).await?,
+								_ => ()
+							}
+						}
+						tracker.send_logs(&guild_id).await?;
+						Ok::<(), crate::error::Error>(())
+					});
+					
+					return Ok(Json(InteractionResponse {
+						kind: InteractionResponseKind::DeferredChannelMessageWithSource,
+						data: Some(InteractionResponseData::DeferredChannelMessageWithSource {
+							flags: 64
+						})
+					}));
+				} else {
+					if let Some(command) = COMMANDS.iter().find(|x| x.name == data.name) {
+						if let Some(callback) = command.slash_action {
+							return Ok(Json(match callback(payload).await.map_err(|x| { println!("{x}"); x })? {
+								SlashResponse::Message { flags, content } =>
+									InteractionResponse {
+										kind: InteractionResponseKind::ChannelMessageWithSource,
+										data: Some(InteractionResponseData::ChannelMessageWithSource {
+											flags,
+											embeds: None,
+											content
+										})
+									},
+								SlashResponse::DeferMessage =>
+									InteractionResponse {
+										kind: InteractionResponseKind::DeferredChannelMessageWithSource,
+										data: Some(InteractionResponseData::DeferredChannelMessageWithSource {
+											flags: 64
+										})
+									}
+							}));
+						}
 					}
 				}
 			}

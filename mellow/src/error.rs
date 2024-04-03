@@ -2,9 +2,6 @@ use tracing_error::{ SpanTrace, InstrumentError };
 
 #[derive(Debug, thiserror::Error)]
 pub enum ErrorKind {
-	#[error("API Error: {0}")]
-	ApiError(#[from] crate::http::ApiError),
-
 	#[error("HTTP Error: {0}")]
 	HttpError(#[from] reqwest::Error),
 
@@ -25,6 +22,12 @@ pub enum ErrorKind {
 
 	#[error("Integer Parsing Error: {0}")]
 	ParseIntegerError(#[from] std::num::ParseIntError),
+
+	#[error("Hex Error: {0}")]
+	HexError(#[from] hex::FromHexError),
+
+	#[error("Sha2 Invalid Length Error: {0}")]
+	InvalidLengthError(#[from] sha2::digest::InvalidLength),
 
 	#[error("Unknown Error")]
 	Unknown

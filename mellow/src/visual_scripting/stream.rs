@@ -1,3 +1,5 @@
+use std::sync::Arc;
+use tokio::sync::RwLock;
 use futures::Stream;
 
 use super::{ Element, Variable, Condition, ElementKind, StatementBlock, StatementConditionKind };
@@ -5,7 +7,7 @@ use super::{ Element, Variable, Condition, ElementKind, StatementBlock, Statemen
 pub struct ElementStream {
 	// would something else be better-suited for this?
 	iterator: Box<dyn Iterator<Item = Element> + Send>,
-	variables: Variable,
+	variables: Arc<RwLock<Variable>>,
 	current_sub_stream: Option<Box<ElementStream>>,
 	current_statement_stream: Option<StatementStream>
 }
@@ -14,7 +16,7 @@ impl ElementStream {
 	pub fn new(elements: Vec<Element>, variables: Variable) -> Self {
 		Self {
 			iterator: Box::new(elements.into_iter()),
-			variables,
+			variables: Arc::new(RwLock::new(variables)),
 			current_sub_stream: None,
 			current_statement_stream: None
 		}
@@ -31,7 +33,7 @@ impl ElementStream {
 							Some(x) => {
 								self.current_sub_stream = Some(Box::new(ElementStream {
 									iterator: Box::new(x.items.into_iter()),
-									variables: self.variables.clone(),
+									variables: Arc::new(RwLock::new(self.variables.try_read().unwrap().clone())),
 									current_sub_stream: None,
 									current_statement_stream: None
 								}));
@@ -48,7 +50,7 @@ impl ElementStream {
 						ElementKind::IfStatement(statement) => {
 							self.current_statement_stream = Some(StatementStream {
 								iterator: Box::new(statement.blocks.into_iter()),
-								variables: self.variables.clone()
+								variables: self.variables.try_read().unwrap().clone()
 							});
 							self.poll_statement_stream(cx)
 						},
@@ -92,10 +94,10 @@ impl ElementStream {
 }
 
 impl Stream for ElementStream {
-	type Item = (Element, Variable);
+	type Item = (Element, Arc<RwLock<Variable>>);
 	fn poll_next(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Option<Self::Item>> {
 		let stream = self.get_mut();
-		stream.get_next(cx).map(|x| x.map(|x| (x, stream.variables.clone())))
+		stream.get_next(cx).map(move |x| x.map(|x| (x, stream.variables.clone())))
 	}
 
 	fn size_hint(&self) -> (usize, Option<usize>) {

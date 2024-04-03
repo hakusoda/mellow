@@ -20,9 +20,6 @@ pub async fn start() -> std::io::Result<()> {
 
 #[derive(Debug, Display, Error)]
 pub enum ApiError {
-	#[display(fmt = "internal_error")]
-	InternalError,
-
 	#[display(fmt = "invalid_request")]
 	GenericInvalidRequest,
 
@@ -41,8 +38,8 @@ pub enum ApiError {
 	#[display(fmt = "not_implemented")]
 	NotImplemented,
 
-	#[display(fmt = "unknown")]
-	Unknown
+	#[display(fmt = "unknown {}", _0)]
+	Unknown(crate::error::Error)
 }
 
 impl actix_web::error::ResponseError for ApiError {
@@ -56,8 +53,7 @@ impl actix_web::error::ResponseError for ApiError {
 
 	fn status_code(&self) -> StatusCode {
 		match *self {
-			ApiError::Unknown |
-			ApiError::InternalError => StatusCode::INTERNAL_SERVER_ERROR,
+			ApiError::Unknown(_) => StatusCode::INTERNAL_SERVER_ERROR,
 			ApiError::GenericInvalidRequest => StatusCode::BAD_REQUEST,
 			ApiError::InvalidApiKey |
 			ApiError::InvalidSignature => StatusCode::FORBIDDEN,
@@ -69,8 +65,8 @@ impl actix_web::error::ResponseError for ApiError {
 }
 
 impl From<crate::error::Error> for ApiError {
-	fn from(_value: crate::error::Error) -> Self {
-		Self::Unknown
+	fn from(value: crate::error::Error) -> Self {
+		Self::Unknown(value)
 	}
 }
 
