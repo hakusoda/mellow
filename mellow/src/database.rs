@@ -247,11 +247,11 @@ impl ServerCommand {
 	}
 }
 
-pub async fn server_exists(id: impl Into<String>) -> Result<bool> {
+pub async fn server_exists(id: &Id<GuildMarker>) -> Result<bool> {
 	// this isn't an ideal method, but this rust library is way too limited, especially when compared to postgrest-js...
 	Ok(DATABASE.from("mellow_servers")
 		.select("id")
-		.eq("id", id.into())
+		.eq("id", id.to_string())
 		.limit(1)
 		.single()
 		.execute()

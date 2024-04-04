@@ -13,10 +13,11 @@ use twilight_model::{
 };
 
 use crate::{
+	util::member_into_partial,
 	server::logging::{ ServerLog, ProfileSyncKind },
 	syncing::sync_single_user,
 	discord::{
-		Guild, GuildMember, ChannelMessage, GuildOnboarding, MessageReference, GuildVerificationLevel,
+		Guild, ChannelMessage, GuildOnboarding, MessageReference, GuildVerificationLevel,
 		ban_member, remove_member, delete_message, assign_member_role, create_channel_message, create_message_reaction
 	},
 	database,
@@ -67,10 +68,9 @@ pub async fn member_add(event_data: &MemberAdd) -> Result<()> {
 	let document = database::get_server_event_response_tree(guild_id, DocumentKind::MemberJoinEvent).await?;
 	if document.is_ready_for_stream() {
 		if let Some(user) = database::get_user_by_discord(guild_id, user_id).await? {
-			// TODO: this member get is pointless, replace with event_data.member
-			let member = GuildMember::fetch(guild_id, user_id).await?;
+			let member = member_into_partial(event_data.member.clone());
 			let (mut stream, mut tracker) = document.into_stream(Variable::create_map([
-				("member", member.into_variable(guild_id))
+				("member", Variable::from_partial_member(Some(&event_data.user), &member, guild_id))
 			], None));
 			while let Some((element, variables)) = stream.next().await {
 				if process_element_for_member(&element, &variables, &mut tracker).await? { break }
@@ -111,7 +111,7 @@ pub async fn member_update(event_data: &MemberUpdate) -> Result<()> {
 			if event_data.roles.is_empty() {
 				let onboarding = GuildOnboarding::fetch(&server_id).await?;
 				if !onboarding.enabled {
-					let guild = Guild::fetch(&server_id).await?;
+					let guild = Guild::fetch(&guild_id).await?;
 					match guild.verification_level {
 						GuildVerificationLevel::High => {
 							PENDING_VERIFICATION_TIMER.write().await.push((guild_id.clone(), event_data.user.id.clone(), SystemTime::now()));
@@ -144,7 +144,7 @@ pub async fn message_create(event_data: &MessageCreate) -> Result<()> {
 		let document = database::get_server_event_response_tree(guild_id, DocumentKind::MessageCreatedEvent).await?;
 		if document.is_ready_for_stream() {
 			let (mut stream, mut tracker) = document.into_stream(Variable::create_map([
-				("member", Variable::from_partial_member(&event_data.author, event_data.member.as_ref().unwrap(), guild_id)),
+				("member", Variable::from_partial_member(Some(&event_data.author), event_data.member.as_ref().unwrap(), guild_id)),
 				("message", event_data.into())
 			], None));
 			while let Some((element, variables)) = stream.next().await {

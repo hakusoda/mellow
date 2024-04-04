@@ -1,8 +1,11 @@
 use std::collections::HashMap;
 use serde::{ Serialize, Deserialize };
-use twilight_model::id::{
-	marker::GuildMarker,
-	Id
+use twilight_model::{
+	id::{
+		marker::{ RoleMarker, GuildMarker },
+		Id
+	},
+	guild::{ Role, PartialMember }
 };
 use async_recursion::async_recursion;
 
@@ -10,7 +13,7 @@ use crate::{
 	server::Server,
 	roblox::get_user_group_roles,
 	patreon::UserIdentityField,
-	discord::{ DiscordRole, GuildMember, DiscordModifyMemberPayload, modify_member, get_guild_roles },
+	discord::{ DiscordModifyMemberPayload, modify_member, get_guild_roles },
 	database::{
 		User, UserResponse, ProfileSyncAction, ProfileSyncActionKind, ProfileSyncActionRequirementKind, ProfileSyncActionRequirementsKind, UserConnection, UserConnectionKind,
 		DATABASE
@@ -33,7 +36,7 @@ pub struct SyncMemberResult {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct RoleChange {
 	pub kind: RoleChangeKind,
-	pub target_id: String,
+	pub target_id: Id<RoleMarker>,
 	pub display_name: String
 }
 
@@ -132,7 +135,7 @@ pub async fn get_connection_metadata(users: &[UserResponse], server: &Server) ->
 	})
 }
 
-async fn get_role_name(id: String, guild_id: impl Into<String>, roles: &mut Option<Vec<DiscordRole>>) -> Result<String> {
+async fn get_role_name(id: &Id<RoleMarker>, guild_id: &Id<GuildMarker>, roles: &mut Option<Vec<Role>>) -> Result<String> {
 	let items = match roles {
 		Some(x) => x,
 		None => {
@@ -140,11 +143,11 @@ async fn get_role_name(id: String, guild_id: impl Into<String>, roles: &mut Opti
 			roles.as_ref().unwrap()
 		}
 	};
-	return Ok(items.iter().find(|x| x.id == id).map_or("unknown role".into(), |x| x.name.clone()));
+	return Ok(items.iter().find(|x| &x.id == id).map_or("unknown role".into(), |x| x.name.clone()));
 }
 
-pub async fn sync_single_user(user: &UserResponse, member: &GuildMember, guild_id: &Id<GuildMarker>, connection_metadata: Option<ConnectionMetadata>) -> Result<SyncMemberResult> {
-	let server = Server::fetch(guild_id.to_string()).await?;
+pub async fn sync_single_user(user: &UserResponse, member: &PartialMember, guild_id: &Id<GuildMarker>, connection_metadata: Option<ConnectionMetadata>) -> Result<SyncMemberResult> {
+	let server = Server::fetch(guild_id).await?;
 	let metadata = match connection_metadata {
 		Some(x) => x,
 		None => get_connection_metadata(&vec![user.clone()], &server).await?
@@ -152,7 +155,7 @@ pub async fn sync_single_user(user: &UserResponse, member: &GuildMember, guild_i
 	sync_member(Some(&user.user), &member, &server, &metadata, &mut None).await
 }
 
-pub async fn sync_member(user: Option<&User>, member: &GuildMember, server: &Server, connection_metadata: &ConnectionMetadata, guild_roles: &mut Option<Vec<DiscordRole>>) -> Result<SyncMemberResult> {
+pub async fn sync_member(user: Option<&User>, member: &PartialMember, server: &Server, connection_metadata: &ConnectionMetadata, guild_roles: &mut Option<Vec<Role>>) -> Result<SyncMemberResult> {
 	let mut roles = member.roles.clone();
 	let mut role_changes: Vec<RoleChange> = vec![];
 	let mut requirement_cache: HashMap<String, bool> = HashMap::new();
@@ -163,28 +166,28 @@ pub async fn sync_member(user: Option<&User>, member: &GuildMember, server: &Ser
 		let met = member_meets_action_requirements(user, action, &actions2, &connection_metadata, &mut requirement_cache, &mut used_connections).await;
 		match action.kind {
 			ProfileSyncActionKind::GiveRoles => {
-				let items: Vec<String> = action.metadata["items"].as_array().unwrap().iter().map(|x| x.as_str().unwrap().to_string()).collect();
+				let items: Vec<Id<RoleMarker>> = action.metadata["items"].as_array().unwrap().iter().map(|x| Id::new(x.as_str().unwrap().parse().unwrap())).collect();
 				if met {
 					if !items.iter().all(|x| member.roles.iter().any(|e| e == x)) {
-						let filtered: Vec<String> = items.into_iter().filter(|x| !member.roles.iter().any(|e| e == x)).collect();
+						let filtered: Vec<Id<RoleMarker>> = items.into_iter().filter(|x| !member.roles.iter().any(|e| e == x)).collect();
 						for item in filtered {
 							roles.push(item.clone());
 							role_changes.push(RoleChange {
 								kind: RoleChangeKind::Added,
 								target_id: item.clone(),
-								display_name: get_role_name(item, &server.id, guild_roles).await?
+								display_name: get_role_name(&item, &server.id, guild_roles).await?
 							});
 						}
 					}
 				} else if action.metadata["can_remove"].as_bool().unwrap() {
-					let filtered: Vec<String> = roles.clone().into_iter().filter(|x| !items.contains(x)).collect();
+					let filtered: Vec<Id<RoleMarker>> = roles.clone().into_iter().filter(|x| !items.contains(x)).collect();
 					if !roles.iter().all(|x| filtered.contains(x)) {
 						let filtered2 = items.iter().filter(|x| roles.contains(x));
 						for item in filtered2 {
 							role_changes.push(RoleChange {
 								kind: RoleChangeKind::Removed,
 								target_id: item.clone(),
-								display_name: get_role_name(item.clone(), &server.id, guild_roles).await?
+								display_name: get_role_name(&item, &server.id, guild_roles).await?
 							});
 						}
 						roles = filtered;
@@ -213,7 +216,7 @@ pub async fn sync_member(user: Option<&User>, member: &GuildMember, server: &Ser
 	
 	let profile_changed = !role_changes.is_empty() || nickname_change.is_some();
 	if profile_changed {
-		modify_member(server.id.clone(), member.id().to_string(), DiscordModifyMemberPayload {
+		modify_member(&server.id, &member.user.as_ref().unwrap().id, DiscordModifyMemberPayload {
 			nick: target_nickname,
 			roles: Some(roles),
 			..Default::default()

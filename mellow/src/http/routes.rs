@@ -14,13 +14,14 @@ use twilight_model::id::{
 
 use super::{ ApiError, ApiResult };
 use crate::{
+	util::member_into_partial,
 	fetch,
 	server::{
 		logging::ServerLog,
 		action_log::ActionLog,
 		Server
 	},
-	discord::{ GuildMember, APP_ID },
+	discord::{ get_member, APP_ID },
 	syncing::{
 		sign_ups::SIGN_UPS,
 		PatreonPledge, SyncMemberResult, ConnectionMetadata,
@@ -97,7 +98,7 @@ async fn sync_member(request: HttpRequest, body: web::Json<SyncMemberPayload>, p
 	if request.headers().get("x-api-key").map_or(false, |x| x.to_str().unwrap() == API_KEY.to_string()) {
 		let (guild_id, user_id) = path.into_inner();
 		if let Some(user) = database::get_user_by_discord(&guild_id, &user_id).await? {
-			let member = GuildMember::fetch(&guild_id, &user_id).await?;
+			let member = member_into_partial(get_member(&guild_id, &user_id).await?);
 			return Ok(web::Json(if let Some(token) = &body.webhook_token {
 				sync_with_token(user, member, &guild_id, &token, false).await?
 			} else if body.is_sign_up.is_some_and(|x| x) {
@@ -174,7 +175,7 @@ async fn patreon_webhook(body: String) -> ApiResult<HttpResponse> {
 	let guild_id: Id<GuildMarker> = serde_json::from_value(response.get("server_id").unwrap().clone())
 		.map_err(|_| ApiError::GenericInvalidRequest)?;
 	if let Some(user) = database::get_user_by_discord(&guild_id, &Id::new(user_id.parse().map_err(|_| ApiError::GenericInvalidRequest)?)).await? {
-		let member = GuildMember::fetch(&guild_id, &Id::new(user.user.connections.iter().find(|x| matches!(x.kind, UserConnectionKind::Discord)).unwrap().id.parse().map_err(|_| ApiError::GenericInvalidRequest)?)).await?;
+		let member = member_into_partial(get_member(&guild_id, &Id::new(user.user.connections.iter().find(|x| matches!(x.kind, UserConnectionKind::Discord)).unwrap().id.parse().map_err(|_| ApiError::GenericInvalidRequest)?)).await?);
 		sync_single_user(&user, &member, &guild_id, Some(ConnectionMetadata {
 			patreon_pledges: vec![PatreonPledge {
 				tiers: payload.data.relationships.currently_entitled_tiers.data.iter().map(|x| x.id.clone()).collect(),

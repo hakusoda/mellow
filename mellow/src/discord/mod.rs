@@ -2,9 +2,12 @@ use serde::{ Serialize, Deserialize };
 use reqwest::Method;
 use tracing::{ Instrument, info_span };
 use serde_repr::{ Serialize_repr, Deserialize_repr };
-use twilight_model::id::{
-	marker::{ UserMarker, GuildMarker },
-	Id
+use twilight_model::{
+	id::{
+		marker::{ RoleMarker, UserMarker, GuildMarker },
+		Id
+	},
+	guild::{ Role, Member }
 };
 use percent_encoding::{ NON_ALPHANUMERIC, utf8_percent_encode };
 
@@ -34,7 +37,7 @@ pub struct DiscordModifyMemberPayload {
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub flags: Option<u8>,
 	#[serde(skip_serializing_if = "Option::is_none")]
-	pub roles: Option<Vec<String>>,
+	pub roles: Option<Vec<Id<RoleMarker>>>,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub channel_id: Option<String>,
 	#[serde(skip_serializing_if = "Option::is_none")]
@@ -55,7 +58,7 @@ impl Default for DiscordModifyMemberPayload {
 	}
 }
 
-pub async fn modify_member(guild_id: String, user_id: String, payload: DiscordModifyMemberPayload) -> Result<()> {
+pub async fn modify_member(guild_id: &Id<GuildMarker>, user_id: &Id<UserMarker>, payload: DiscordModifyMemberPayload) -> Result<()> {
 	patch_json(format!("https://discord.com/api/v10/guilds/{guild_id}/members/{user_id}"), payload).await
 }
 
@@ -114,7 +117,7 @@ pub struct Guild {
 }
 
 impl Guild {
-	pub async fn fetch(guild_id: &str) -> Result<Self> {
+	pub async fn fetch(guild_id: &Id<GuildMarker>) -> Result<Self> {
 		Ok(match CACHES.discord_guilds.get(guild_id)
 			.instrument(info_span!("cache.discord_guilds.read", ?guild_id))
 			.await {
@@ -122,7 +125,7 @@ impl Guild {
 				None => {
 					let guild: Guild = get_json(format!("https://discord.com/api/v10/guilds/{}", guild_id), None).await?;
 					let span = info_span!("cache.discord_guilds.write", ?guild_id);
-					CACHES.discord_guilds.insert(guild_id.to_string(), guild.clone())
+					CACHES.discord_guilds.insert(*guild_id, guild.clone())
 						.instrument(span)
 						.await;
 	
@@ -168,74 +171,14 @@ pub enum GuildVerificationLevel {
 	VeryHigh
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct DiscordUser {
-	pub id: Id<UserMarker>,
-	pub bot: Option<bool>,
-	pub avatar: Option<String>,
-	pub username: String,
-	pub global_name: Option<String>,
-	pub public_flags: u64,
-	pub discriminator: String,
-	pub avatar_decoration: Option<String>
+pub async fn get_member(guild_id: &Id<GuildMarker>, user_id: &Id<UserMarker>) -> Result<Member> {
+	get_json(format!("https://discord.com/api/v10/guilds/{}/members/{}", guild_id, user_id), None).await
 }
 
-impl DiscordUser {
-	pub fn display_name(&self) -> String {
-		self.global_name.as_ref().unwrap_or(&self.username).clone()
-	}
-
-	pub fn avatar_url(&self) -> Option<String> {
-		self.avatar.as_ref().map(|x| format!("https://cdn.discordapp.com/avatars/{}/{x}.webp", self.id))
-	}
+pub async fn get_members(guild_id: &Id<GuildMarker>) -> Result<Vec<Member>> {
+	get_json(format!("https://discord.com/api/v10/guilds/{}/members?limit=100", guild_id), None).await
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct GuildMember {
-	pub deaf: bool,
-	pub mute: bool,
-	pub nick: Option<String>,
-	pub user: DiscordUser,
-	pub roles: Vec<String>,
-	pub avatar: Option<String>,
-	pub pending: bool,
-	pub joined_at: String,
-	pub permissions: Option<String>
-}
-
-impl GuildMember {
-	pub async fn fetch(guild_id: &Id<GuildMarker>, user_id: &Id<UserMarker>) -> Result<Self> {
-		get_json(format!("https://discord.com/api/v10/guilds/{}/members/{}", guild_id, user_id), None).await
-	}
-
-	pub fn id(&self) -> &Id<UserMarker> {
-		&self.user.id
-	}
-
-	pub fn display_name(&self) -> String {
-		self.nick.as_ref().map_or_else(|| self.user.display_name(), |x| x.clone())
-	}
-}
-
-pub async fn get_members(guild_id: impl Into<String>) -> Result<Vec<GuildMember>> {
-	get_json(format!("https://discord.com/api/v10/guilds/{}/members?limit=100", guild_id.into()), None).await
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct DiscordRole {
-	pub id: String,
-	pub name: String,
-	pub icon: Option<String>,
-	pub flags: u8,
-	pub color: u32,
-	pub hoist: bool,
-	pub managed: bool,
-	pub position: u8,
-	pub mentionable: bool,
-	pub permissions: String,
-	pub unicode_emoji: Option<String>
-}
-
-pub async fn get_guild_roles(guild_id: impl Into<String>) -> Result<Vec<DiscordRole>> {
-	get_json(format!("https://discord.com/api/v10/guilds/{}/roles", guild_id.into()), None).await
+pub async fn get_guild_roles(guild_id: &Id<GuildMarker>) -> Result<Vec<Role>> {
+	get_json(format!("https://discord.com/api/v10/guilds/{}/roles", guild_id), None).await
 }

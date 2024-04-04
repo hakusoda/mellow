@@ -2,15 +2,12 @@ use serde::{ Serialize, Deserialize };
 use actix_web::web::Json;
 use serde_repr::*;
 use futures_util::StreamExt;
-use twilight_model::id::{
-	marker::GuildMarker,
-	Id
-};
+use twilight_model::application::interaction::{ Interaction, InteractionData, InteractionType };
 
 use crate::{
 	http::{ ApiError, ApiResult },
 	server::Server,
-	discord::{ GuildMember, edit_original_response },
+	discord::edit_original_response,
 	commands::COMMANDS,
 	database::ServerCommand,
 	visual_scripting::{ Variable, ElementKind },
@@ -23,35 +20,6 @@ pub enum ApplicationCommandKind {
 	ChatInput = 1,
 	User,
 	Message
-}
-
-#[derive(Deserialize, Debug)]
-pub struct ApplicationCommandData {
-	//pub id: String,
-	pub name: String,
-	//#[serde(rename = "type")]
-	//pub kind: ApplicationCommandKind,
-	pub guild_id: Option<Id<GuildMarker>>
-}
-
-#[derive(Deserialize_repr, Debug)]
-#[repr(u8)]
-pub enum InteractionKind {
-	Ping = 1,
-	ApplicationCommand,
-	MessageComponent,
-	ApplicationCommandAutocomplete,
-	ModalSubmit
-}
-
-#[derive(Deserialize, Debug)]
-pub struct InteractionPayload {
-	#[serde(rename = "type")]
-	pub kind: InteractionKind,
-	pub data: Option<ApplicationCommandData>,
-	pub token: String,
-	pub member: Option<GuildMember>,
-	pub guild_id: Option<String>
 }
 
 #[derive(Serialize_repr, Debug)]
@@ -129,27 +97,27 @@ pub struct InteractionResponse {
 }
 
 pub async fn handle_request(body: String) -> ApiResult<Json<InteractionResponse>> {
-	let payload: InteractionPayload = serde_json::from_str(&body).unwrap();
+	let payload: Interaction = serde_json::from_str(&body).unwrap();
 	match payload.kind {
-		InteractionKind::Ping => Ok(Json(InteractionResponse {
+		InteractionType::Ping => Ok(Json(InteractionResponse {
 			kind: InteractionResponseKind::Pong,
 			data: None
 		})),
-		InteractionKind::ApplicationCommand => {
-			if let Some(ref data) = payload.data {
+		_ => match payload.data.as_ref().unwrap() {
+			InteractionData::ApplicationCommand(data) => {
 				if let Some(guild_id) = data.guild_id {
 					let command = ServerCommand::fetch(&guild_id, data.name.clone()).await?;
 					let token = payload.token.clone();
-					let member = payload.member.clone();
+					let member = payload.member.clone().unwrap();
 					let guild_id = guild_id.clone();
 					tokio::spawn(async move {
-						let (mut stream, mut tracker) = command.document.into_stream(Variable::create_map([
-							("member".into(), member.unwrap().into_variable(&guild_id))
+						let (mut stream, tracker) = command.document.into_stream(Variable::create_map([
+							("member".into(), Variable::from_partial_member(payload.user.as_ref(), &member, &guild_id))
 						], None));
 						while let Some((element, variables)) = stream.next().await {
 							match element.kind {
 								ElementKind::GetLinkedPatreonCampaign => {
-									let server = Server::fetch(guild_id.to_string()).await?;
+									let server = Server::fetch(&guild_id).await?;
 									variables.write().await.set("campaign", crate::patreon::get_campaign(server.oauth_authorisations.first().unwrap()).await?.into());
 								},
 								ElementKind::InteractionReply(data) =>
@@ -158,7 +126,7 @@ pub async fn handle_request(body: String) -> ApiResult<Json<InteractionResponse>
 										embeds: None,
 										content: Some(data.resolve(&*variables.read().await))
 									}).await?,
-								_ => ()
+							_ => ()
 							}
 						}
 						tracker.send_logs(&guild_id).await?;
@@ -195,16 +163,16 @@ pub async fn handle_request(body: String) -> ApiResult<Json<InteractionResponse>
 						}
 					}
 				}
-			}
-			Ok(Json(InteractionResponse {
-				kind: InteractionResponseKind::ChannelMessageWithSource,
-				data: Some(InteractionResponseData::ChannelMessageWithSource {
-					flags: None,
-					embeds: None,
-					content: Some("PLACEHOLDER?!?!?!?".into())
-				})
-			}))
-		},
-		_ => Err(ApiError::NotImplemented)
+				Ok(Json(InteractionResponse {
+					kind: InteractionResponseKind::ChannelMessageWithSource,
+					data: Some(InteractionResponseData::ChannelMessageWithSource {
+						flags: None,
+						embeds: None,
+						content: Some("PLACEHOLDER?!?!?!?".into())
+					})
+				}))
+			},
+			_ => Err(ApiError::NotImplemented)
+		}
 	}
 }

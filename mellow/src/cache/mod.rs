@@ -7,8 +7,8 @@ use twilight_model::id::{
 };
 
 use crate::{
-	patreon::{ Campaign2, UserIdentity },
 	discord::{ Guild, GuildOnboarding },
+	patreon::{ Campaign2, UserIdentity },
 	database::ServerCommand,
 	visual_scripting::{ Document, DocumentKind }
 };
@@ -38,7 +38,7 @@ pub static CACHES: Lazy<Caches> = Lazy::new(|| Caches {
 });
 
 pub struct Caches {
-	pub discord_guilds: Cache<String, Guild>,
+	pub discord_guilds: Cache<Id<GuildMarker>, Guild>,
 	pub discord_guild_onboarding: Cache<String, GuildOnboarding>,
 
 	pub event_responses: Cache<(Id<GuildMarker>, DocumentKind), Document>,

@@ -1,28 +1,30 @@
-#![feature(let_chains, try_trait_v2, duration_constructors)]
+#![feature(let_chains, duration_constructors)]
 use std::time::{ Duration, SystemTime };
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 use tokio_stream::StreamExt;
 use simple_logger::SimpleLogger;
-use twilight_model::id::{
-	marker::{ UserMarker, GuildMarker },
-	Id
+use twilight_model::{
+	id::{
+		marker::{ UserMarker, GuildMarker },
+		Id
+	},
+	application::interaction::Interaction
 };
 
+use util::member_into_partial;
 use discord::{
 	gateway::event_handler::process_element_for_member,
-	GuildMember
+	get_member
 };
-use interaction::InteractionPayload;
-use visual_scripting::{
-	Variable, DocumentKind
-};
+use visual_scripting::{ Variable, DocumentKind };
 
 mod http;
 mod util;
 mod cache;
 mod error;
 mod fetch;
+mod traits;
 mod roblox;
 mod server;
 mod discord;
@@ -37,7 +39,7 @@ pub struct Command {
 	name: &'static str,
 	no_dm: bool,
 	description: Option<String>,
-	slash_action: Option<fn(InteractionPayload) -> BoxFuture<'static, Result<SlashResponse>>>,
+	slash_action: Option<fn(Interaction) -> BoxFuture<'static, Result<SlashResponse>>>,
 	default_member_permissions: Option<String>
 }
 
@@ -94,9 +96,9 @@ async fn spawn_onboarding_job(stop_signal: CancellationToken) {
 					tokio::spawn(async move {
 						let document = database::get_server_event_response_tree(&guild_id, DocumentKind::MemberCompletedOnboardingEvent).await.unwrap();
 						if document.is_ready_for_stream(){
-							let member = GuildMember::fetch(&guild_id, &user_id).await.unwrap();
+							let member = member_into_partial(get_member(&guild_id, &user_id).await.unwrap());
 							let (mut stream, mut tracker) = document.into_stream(Variable::create_map([
-								("member", member.into_variable(&guild_id))
+								("member", Variable::from_partial_member(None, &member, &guild_id))
 							], None));
 							while let Some((element, variables)) = stream.next().await {
 								if process_element_for_member(&element, &variables, &mut tracker).await.unwrap() { break }

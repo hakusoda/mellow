@@ -1,13 +1,14 @@
 use serde::{ Serialize, Deserialize };
 use tracing::{ Instrument, info_span };
-use twilight_model::id::Id;
+use twilight_model::guild::PartialMember;
 
 use super::{ action_log::ActionLog, Server };
 use crate::{
 	util::unwrap_string_or_array,
 	cache::CACHES,
+	traits::{ QuickId, AvatarUrl, DisplayName },
 	syncing::{ RoleChange, RoleChangeKind, NicknameChange },
-	discord::{ GuildMember, ChannelMessage, create_channel_message },
+	discord::{ ChannelMessage, create_channel_message },
 	database::UserConnection,
 	interaction::{ Embed, EmbedField, EmbedAuthor },
 	visual_scripting::ActionTrackerItem,
@@ -22,17 +23,17 @@ pub enum ServerLog {
 	ServerProfileSync {
 		#[serde(skip)]
 		kind: ProfileSyncKind,
-		member: GuildMember,
-		forced_by: Option<GuildMember>,
+		member: PartialMember,
+		forced_by: Option<PartialMember>,
 		role_changes: Vec<RoleChange>,
 		nickname_change: Option<NicknameChange>,
 		relevant_connections: Vec<UserConnection>
 	} = 1 << 1,
 	UserCompletedOnboarding {
-		member: GuildMember
+		member: PartialMember
 	} = 1 << 2,
 	EventResponseResult {
-		invoker: GuildMember,
+		invoker: PartialMember,
 		event_kind: String,
 		member_result: EventResponseResultMemberResult
 	} = 1 << 3,
@@ -74,7 +75,7 @@ impl Server {
 						ServerLog::ActionLog(payload) => {
 							let website_url = format!("https://hakumi.cafe/mellow/server/{}/settings/action_log", self.id);
 							if let Some(document) = payload.target_document.clone() {
-								let cache_key = (Id::new(self.id.parse()?), document.kind.clone());
+								let cache_key = (self.id, document.kind.clone());
 								let span = info_span!("cache.event_responses.write", ?cache_key);
 								CACHES.event_responses.insert(cache_key, document)
 									.instrument(span)
@@ -215,11 +216,11 @@ impl Server {
 		Ok(())
 	}
 
-	fn embed_author(&self, member: &GuildMember, title: Option<String>) -> EmbedAuthor {
+	fn embed_author(&self, member: &PartialMember, title: Option<String>) -> EmbedAuthor {
 		EmbedAuthor {
 			url: Some(format!("https://hakumi.cafe/mellow/server/{}/member/{}", self.id, member.id())),
-			name: title.or(member.user.global_name.clone()),
-			icon_url: member.avatar.as_ref().or(member.user.avatar.as_ref()).map(|x| format!("https://cdn.discordapp.com/avatars/{}/{x}.webp?size=48", member.id())),
+			name: title.or_else(|| Some(member.display_name().into())),
+			icon_url: member.avatar_url(),
 			..Default::default()
 		}
 	}

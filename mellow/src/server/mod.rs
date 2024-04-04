@@ -1,4 +1,8 @@
 use serde::{ Serialize, Deserialize };
+use twilight_model::id::{
+	marker::GuildMarker,
+	Id
+};
 
 use crate::{
 	database::DATABASE,
@@ -11,7 +15,7 @@ pub mod action_log;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Server {
-	pub id: String,
+	pub id: Id<GuildMarker>,
 	pub actions: Vec<ProfileSyncAction>,
 	pub logging_types: u8,
 	pub default_nickname: Option<String>,
@@ -21,10 +25,10 @@ pub struct Server {
 }
 
 impl Server {
-	pub async fn fetch(server_id: impl Into<String>) -> Result<Self> {
+	pub async fn fetch(server_id: &Id<GuildMarker>) -> Result<Self> {
 		Ok(serde_json::from_str(&DATABASE.from("mellow_servers")
 			.select("id,default_nickname,allow_forced_syncing,logging_types,logging_channel_id,actions:mellow_binds(id,name,type,metadata,requirements_type,requirements:mellow_bind_requirements(id,type,data)),oauth_authorisations:mellow_server_oauth_authorisations(expires_at,token_type,access_token,refresh_token)")
-			.eq("id", server_id.into())
+			.eq("id", server_id.to_string())
 			.limit(1)
 			.single()
 			.execute()

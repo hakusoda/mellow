@@ -1,4 +1,8 @@
 use serde::{ Serialize, Deserialize };
+use twilight_model::id::{
+	marker::GuildMarker,
+	Id
+};
 
 use crate::{
 	util::unwrap_string_or_array,
@@ -17,7 +21,7 @@ pub struct ActionLog {
 	pub kind: String,
 	pub data: serde_json::Value,
 	pub author: ActionLogAuthor,
-	pub server_id: String,
+	pub server_id: Id<GuildMarker>,
 	pub target_action: Option<IdentifiedObject>,
 	pub target_webhook: Option<IdentifiedObject>,
 	#[serde(skip_serializing)]
@@ -25,16 +29,15 @@ pub struct ActionLog {
 }
 
 impl ActionLog {
-	pub fn action_string(&self, server_id: impl Into<String>) -> String {
-		let server_id: String = server_id.into();
+	pub fn action_string(&self, guild_id: &Id<GuildMarker>) -> String {
 		match self.kind.as_str() {
 			"mellow.server.api_key.created" => "created a new API Key".into(),
-			"mellow.server.webhook.created" => format!("created  {}", self.format_webhook(server_id)),
-			"mellow.server.webhook.updated" => format!("updated  {}", self.format_webhook(server_id)),
-			"mellow.server.webhook.deleted" => format!("deleted  {}", self.format_webhook(server_id)),
-			"mellow.server.syncing.action.created" => format!("created  {}", self.format_sync_action(server_id)),
-			"mellow.server.syncing.action.updated" => format!("updated  {}", self.format_sync_action(server_id)),
-			"mellow.server.syncing.action.deleted" => format!("deleted  {}", self.format_sync_action(server_id)),
+			"mellow.server.webhook.created" => format!("created  {}", self.format_webhook(guild_id)),
+			"mellow.server.webhook.updated" => format!("updated  {}", self.format_webhook(guild_id)),
+			"mellow.server.webhook.deleted" => format!("deleted  {}", self.format_webhook(guild_id)),
+			"mellow.server.syncing.action.created" => format!("created  {}", self.format_sync_action(guild_id)),
+			"mellow.server.syncing.action.updated" => format!("updated  {}", self.format_sync_action(guild_id)),
+			"mellow.server.syncing.action.deleted" => format!("deleted  {}", self.format_sync_action(guild_id)),
 			"mellow.server.syncing.settings.updated" => "updated the syncing settings".into(),
 			"mellow.server.discord_logging.updated" => "updated the logging settings".into(),
 			"mellow.server.ownership.changed" => "transferred ownership to {unimplemented}".into(),
@@ -52,17 +55,17 @@ impl ActionLog {
 		}
 	}
 
-	fn format_sync_action(&self, server_id: impl Into<String>) -> String {
+	fn format_sync_action(&self, guild_id: &Id<GuildMarker>) -> String {
 		if let Some(action) = &self.target_action {
-			format!("<:sync_action:1220987025608413195> [{}](https://hakumi.cafe/mellow/server/{}/syncing/actions/{})", action.name, server_id.into(), action.id)
+			format!("<:sync_action:1220987025608413195> [{}](https://hakumi.cafe/mellow/server/{}/syncing/actions/{})", action.name, guild_id, action.id)
 		} else {
 			format!("<:sync_action_deleted:1220987839328682056> ~~{}~~", self.data.get("name").and_then(unwrap_string_or_array).unwrap_or("Unknown Action"))
 		}
 	}
 	
-	fn format_webhook(&self, server_id: impl Into<String>) -> String {
+	fn format_webhook(&self, guild_id: &Id<GuildMarker>) -> String {
 		if let Some(webhook) = &self.target_webhook {
-			format!("<:webhook:1220992010975051796> [{}](https://hakumi.cafe/mellow/server/{}/settings/webhooks/{})", webhook.name, server_id.into(), webhook.id)
+			format!("<:webhook:1220992010975051796> [{}](https://hakumi.cafe/mellow/server/{}/settings/webhooks/{})", webhook.name, guild_id, webhook.id)
 		} else {
 			format!("<:webhook_deleted:1220992273525772309> ~~{}~~", self.data.get("name").and_then(unwrap_string_or_array).unwrap_or("Unknown Webhook"))
 		}

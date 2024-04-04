@@ -18,5 +18,5 @@ lto = true
 strip = true
 panic = "unwind"
 opt-level = "s"
-codegen-units = 1
+codegen-units = 4
 debug-assertions = false

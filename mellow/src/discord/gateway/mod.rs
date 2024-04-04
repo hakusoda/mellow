@@ -19,7 +19,7 @@ pub async fn initialise() {
 			emoji: None,
 			flags: None,
 			party: None,
-			state: Some("now here's the syncer".into()),
+			state: Some(std::env::var("DISCORD_STATUS_TEXT").unwrap_or("now here's the syncer".into())),
 			assets: None,
 			buttons: vec![],
 			details: None,
@@ -52,7 +52,7 @@ pub async fn initialise() {
 			Event::MemberAdd(event_data) => {
 				tokio::spawn(async move {
 					if let Err(error) = event_handler::member_add(&event_data).await {
-						Server::fetch(event_data.guild_id.to_string()).await.unwrap().send_logs(vec![ServerLog::VisualScriptingProcessorError {
+						Server::fetch(&event_data.guild_id).await.unwrap().send_logs(vec![ServerLog::VisualScriptingProcessorError {
 							error: error.to_string(),
 							document_name: "New Member Event".into()
 						}]).await.unwrap();

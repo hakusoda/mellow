@@ -1,65 +1,66 @@
 use tokio::time;
 use mellow_macros::command;
-use twilight_model::id::{
-	marker::GuildMarker,
-	Id
+use twilight_model::{
+	id::{
+		marker::GuildMarker,
+		Id
+	},
+	guild::PartialMember,
+	application::interaction::Interaction
 };
 
 use crate::{
+	util::member_into_partial,
+	traits::QuickId,
 	server::{
 		logging::{ ServerLog, ProfileSyncKind },
-		Server
+		Server,
 	},
-	discord::{ GuildMember, get_members, edit_original_response },
+	discord::{ Guild, get_members, edit_original_response },
 	syncing::{
 		sign_ups::create_sign_up,
 		RoleChangeKind, SyncMemberResult,
 		sync_member, get_connection_metadata, sync_single_user
 	},
 	database::{ UserResponse, get_user_by_discord, get_users_by_discord },
-	interaction::{ Embed, EmbedField, InteractionPayload, InteractionResponseData },
+	interaction::InteractionResponseData,
 	Result, SlashResponse
 };
 
-#[tracing::instrument]
-pub async fn sync_with_token(user: UserResponse, member: GuildMember, guild_id: &Id<GuildMarker>, interaction_token: &String, is_onboarding: bool) -> Result<SyncMemberResult> {
+#[tracing::instrument(skip(user, member))]
+pub async fn sync_with_token(user: UserResponse, member: PartialMember, guild_id: &Id<GuildMarker>, interaction_token: &String, is_onboarding: bool) -> Result<SyncMemberResult> {
 	let result = sync_single_user(&user, &member, &guild_id, None).await?;
-	let mut fields = vec![];
-	if let Some(changes) = &result.nickname_change {
-		fields.push(EmbedField {
-			name: "Nickname changes".into(),
-			value: format!("```diff{}{}```",
-				changes.0.as_ref().map(|x| format!("\n- {x}")).unwrap_or("".into()),
-				changes.1.as_ref().map(|x| format!("\n+ {x}")).unwrap_or("".into())
-			),
-			inline: None
-		});
-	}
-	if !result.role_changes.is_empty() {
-		fields.push(EmbedField {
-			name: "Role changes".into(),
-			value: format!("```diff\n{}```", result.role_changes.iter().map(|x| match x.kind {
-				RoleChangeKind::Added => format!("+ {}", x.display_name),
-				RoleChangeKind::Removed => format!("- {}", x.display_name)
-			}).collect::<Vec<String>>().join("\n")),
-			inline: None
-		});
+	let mut has_assigned_role = false;
+	let mut has_retracted_role = false;
+	for item in result.role_changes.iter() {
+		match item.kind {
+			RoleChangeKind::Added => has_assigned_role = true,
+			RoleChangeKind::Removed => has_retracted_role = true
+		}
+		if has_assigned_role && has_retracted_role {
+			break;
+		}
 	}
 
 	edit_original_response(interaction_token, InteractionResponseData::ChannelMessageWithSource {
 		flags: None,
-		embeds: if !fields.is_empty() { Some(vec![
-			Embed {
-				fields: Some(fields),
-				..Default::default()
-			}
-		]) } else { None },
-		content: Some(format!("{}{}\n\n[<:gear_fill:1224667889592700950>  Edit Server Settings](https://hakumi.cafe/mellow/server/{}/user_settings)  • [<:personraisedhand:1219234152709095424> Get Support](https://discord.com/invite/rs3r4dQu9P)", if result.profile_changed {
-			format!("## <:check2circle:1219235152580837419>  Server Profile has been updated.\n{}",
-				if result.role_changes.is_empty() { "" } else { "Your roles have been updated." }
+		embeds: None,
+		content: Some(format!("{}{}\n[<:gear_fill:1224667889592700950>  Your Server Preferences <:external_link:1225472071417729065>](https://hakumi.cafe/mellow/server/{}/user_settings)   •  [<:personraisedhand:1219234152709095424> Get Support](https://discord.com/invite/rs3r4dQu9P)", if result.profile_changed {
+			format!("## <:check2circle:1219235152580837419>  Your server profile has been updated.\n{}```diff\n{}```",
+				if has_assigned_role && has_retracted_role {
+					"You have been assigned and retracted roles, ...equality! o(>ω<)o"
+				} else if has_assigned_role {
+					"You have been assigned new roles, hold them dearly to your heart! ♡(>ᴗ•)"
+				} else {
+					"Some of your roles were retracted, that's either a good thing, or a bad thing! ┐(︶▽︶)┌"
+				},
+				result.role_changes.iter().map(|x| match x.kind {
+					RoleChangeKind::Added => format!("+ {}", x.display_name),
+					RoleChangeKind::Removed => format!("- {}", x.display_name)
+				}).collect::<Vec<String>>().join("\n")
 			)
 		} else {
-			"## <:check2circle:1219235152580837419>  Server Profile is up-to-date.\nYour server profile is already up-to-date, no adjustments have been made.\nIf you were expecting a different result, you may need to wait a few minutes.".into()
+			"## <:mellow_squircled:1225413361777508393>  Your server profile is already up to par!\nAccording to my simulated brain, there's nothing to change here, you're all set!\nIf you were expecting a *different* result, you may need to try again in a few minutes, apologies!\n".into()
 		}, if result.server.actions.iter().all(|x| x.requirements.iter().all(|e| e.relevant_connection().map_or(true, |x| user.user.server_connections().into_iter().any(|e| x == e.kind)))) { "".to_string() } else {
 			format!("\n\n### You're missing connections\nYou haven't given this server access to all connections yet, change that [here](https://hakumi.cafe/mellow/server/{guild_id}/user_settings)!")
 		}, guild_id))
@@ -89,37 +90,38 @@ pub async fn sync_with_token(user: UserResponse, member: GuildMember, guild_id: 
 }
 
 // TODO: allow users to sync in dms via some sort of server selection
-#[tracing::instrument]
+#[tracing::instrument(skip_all)]
 #[command(no_dm, description = "Sync your server profile. (may contain traces of burgers)")]
-pub async fn sync(interaction: InteractionPayload) -> Result<SlashResponse> {
-	let guild_id = Id::new(interaction.guild_id.clone().unwrap().parse()?);
-
+pub async fn sync(interaction: Interaction) -> Result<SlashResponse> {
 	let member = interaction.member.unwrap();
-	if let Some(user) = get_user_by_discord(&guild_id, member.id()).await? {
+	let user_id = member.id();
+	let guild_id = interaction.guild_id.unwrap();
+	if let Some(user) = get_user_by_discord(&guild_id, user_id).await? {
 		return Ok(SlashResponse::defer(interaction.token.clone(), Box::pin(async move {
 			sync_with_token(user, member, &guild_id, &interaction.token, false).await?;
 			Ok(())
 		})));
 	}
 
-	create_sign_up(guild_id, *member.id(), interaction.token).await;
+	create_sign_up(guild_id, *user_id, interaction.token).await;
+	
+	let guild = Guild::fetch(&guild_id).await?;
 	Ok(SlashResponse::Message {
 		flags: Some(64),
-		content: Some(format!("## Hello, welcome to the server!\nYou appear to be new to mellow, this server uses mellow to sync member profiles with external services, such as Roblox.\nIf you would like to continue, please continue [here](https://discord.com/api/oauth2/authorize?client_id=1068554282481229885&redirect_uri=https%3A%2F%2Fapi.hakumi.cafe%2Fv0%2Fauth%2Fcallback%2Fmellow&response_type=code&scope=identify&state=sync.{}), don't worry, it shouldn't take long!", interaction.guild_id.unwrap()))
+		content: Some(format!("# <:waving_hand:1225409285203431565> <:mellow_squircled:1225413361777508393>  mellow says konnichiwa (hello)!\nWelcome to *{}*, before you can start syncing here, you need to get set up with mellow!\nWhenever you're ready, tap [here](<https://discord.com/api/oauth2/authorize?client_id=1068554282481229885&redirect_uri=https%3A%2F%2Fapi.hakumi.cafe%2Fv0%2Fauth%2Fcallback%2Fmellow&response_type=code&scope=identify&state=sync.{}>) to proceed, it won't take long!\n\n*fancy knowing what mellow is? read up on it [here](<https://hakumi.cafe/docs/mellow>)!*", guild.name, guild_id))
 	})
 }
 
-#[tracing::instrument]
-#[command(no_dm, description = "Forcefully sync every member in the server.", default_member_permissions = "0")]
-pub async fn forcesyncall(interaction: InteractionPayload) -> Result<SlashResponse> {
-	tracing::info!("hello everyone welcome to");
+#[tracing::instrument(skip_all)]
+#[command(no_dm, description = "Forcefully sync every member in this server.", default_member_permissions = "0")]
+pub async fn forcesyncall(interaction: Interaction) -> Result<SlashResponse> {
 	Ok(SlashResponse::defer(interaction.token.clone(), Box::pin(async move {
 		let guild_id = interaction.guild_id.unwrap();
 		
 		let server = Server::fetch(&guild_id).await?;
 		let members = get_members(&guild_id).await?;
 		
-		let users = get_users_by_discord(&Id::new(guild_id.parse()?), members.iter().map(|x| x.id()).collect()).await?;
+		let users = get_users_by_discord(&guild_id, members.iter().map(|x| &x.user.id).collect()).await?;
 		let metadata = get_connection_metadata(&users, &server).await?;
 
 		let mut logs: Vec<ServerLog> = vec![];
@@ -128,8 +130,10 @@ pub async fn forcesyncall(interaction: InteractionPayload) -> Result<SlashRespon
 
 		let mut guild_roles = None;
 		for member in members {
-			let string_id = member.id().to_string();
-			let result = sync_member(users.iter().find(|x| x.sub == string_id).map(|x| &x.user), &member, &server, &metadata, &mut guild_roles).await?;
+			let partial = member_into_partial(member.clone());
+			let string_id = member.user.id.to_string();
+
+			let result = sync_member(users.iter().find(|x| x.sub == string_id).map(|x| &x.user), &partial, &server, &metadata, &mut guild_roles).await?;
 			if result.profile_changed {
 				// sleep for one second to avoid hitting Discord ratelimit
 				time::sleep(time::Duration::from_secs(1)).await;
@@ -137,7 +141,7 @@ pub async fn forcesyncall(interaction: InteractionPayload) -> Result<SlashRespon
 
 				logs.push(ServerLog::ServerProfileSync {
 					kind: ProfileSyncKind::Default,
-					member,
+					member: partial,
 					forced_by: interaction.member.clone(),
 					role_changes: result.role_changes,
 					nickname_change: result.nickname_change,
