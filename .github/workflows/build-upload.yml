@@ -23,7 +23,7 @@ jobs:
         API_KEY: ${{secrets.API_KEY}}
         RUST_LOG: ${{env.RUST_LOG}}
         DISCORD_TOKEN: ${{secrets.DISCORD_TOKEN}}
-        DISCORD_APP_ID: 1068554282481229885
+        DISCORD_APP_ID: '1068554282481229885'
         ABSOLUTESOLVER: ${{secrets.ABSOLUTESOLVER}}
         SUPABASE_API_KEY: ${{secrets.SUPABASE_API_KEY}}
         DISCORD_PUBLIC_KEY: 49ae4185b6190ae3b43d29933f68163df2b29ce3616c2a10c5ced764770e2526
@@ -46,4 +46,6 @@ jobs:
         username: debian
         key: ${{ secrets.SERVER_SSH_KEY }}
         port: 22
-        script: sudo systemctl restart mellow
+        script: |
+          chmod 777 /home/debian/artifacts/mellow
+          sudo systemctl restart mellow
