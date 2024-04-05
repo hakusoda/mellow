@@ -23,10 +23,10 @@ jobs:
         API_KEY: ${{secrets.API_KEY}}
         RUST_LOG: ${{env.RUST_LOG}}
         DISCORD_TOKEN: ${{secrets.DISCORD_TOKEN}}
-        DISCORD_APP_ID: ${{env.DISCORD_APP_ID}}
+        DISCORD_APP_ID: 1068554282481229885
         ABSOLUTESOLVER: ${{secrets.ABSOLUTESOLVER}}
         SUPABASE_API_KEY: ${{secrets.SUPABASE_API_KEY}}
-        DISCORD_PUBLIC_KEY: ${{env.DISCORD_APP_PUBLIC_KEY}}
+        DISCORD_PUBLIC_KEY: 49ae4185b6190ae3b43d29933f68163df2b29ce3616c2a10c5ced764770e2526
         ROBLOX_OPEN_CLOUD_KEY: ${{secrets.ROBLOX_OPEN_CLOUD_KEY}}
     - name: Upload
       uses: Dylan700/sftp-upload-action@latest
@@ -39,3 +39,10 @@ jobs:
           ./target/release/ => /home/debian/artifacts
         ignore: |
           !mellow
+    - uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.SERVER_SSH_IP }}
+        username: debian
+        key: ${{ secrets.SERVER_SSH_KEY }}
+        port: 22
+        script: sudo systemctl restart mellow
