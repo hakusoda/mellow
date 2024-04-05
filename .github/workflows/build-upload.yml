@@ -5,15 +5,7 @@ on:
     types: [published]
 
 env:
-  API_KEY: ${{secrets.API_KEY}}
-  RUST_LOG: ${{env.RUST_LOG}}
-  DISCORD_TOKEN: ${{secrets.DISCORD_TOKEN}}
-  DISCORD_APP_ID: ${{env.DISCORD_APP_ID}}
-  ABSOLUTESOLVER: ${{secrets.ABSOLUTESOLVER}}
   CARGO_TERM_COLOR: always
-  SUPABASE_API_KEY: ${{secrets.SUPABASE_API_KEY}}
-  DISCORD_PUBLIC_KEY: ${{env.DISCORD_APP_PUBLIC_KEY}}
-  ROBLOX_OPEN_CLOUD_KEY: ${{secrets.ROBLOX_OPEN_CLOUD_KEY}}
 
 jobs:
   build:
@@ -27,6 +19,15 @@ jobs:
       uses: Swatinem/rust-cache@v2
     - name: Build
       run: cargo build --release --verbose
+      env:
+        API_KEY: ${{secrets.API_KEY}}
+        RUST_LOG: ${{env.RUST_LOG}}
+        DISCORD_TOKEN: ${{secrets.DISCORD_TOKEN}}
+        DISCORD_APP_ID: ${{env.DISCORD_APP_ID}}
+        ABSOLUTESOLVER: ${{secrets.ABSOLUTESOLVER}}
+        SUPABASE_API_KEY: ${{secrets.SUPABASE_API_KEY}}
+        DISCORD_PUBLIC_KEY: ${{env.DISCORD_APP_PUBLIC_KEY}}
+        ROBLOX_OPEN_CLOUD_KEY: ${{secrets.ROBLOX_OPEN_CLOUD_KEY}}
     - name: Upload
       uses: Dylan700/sftp-upload-action@latest
       with:
