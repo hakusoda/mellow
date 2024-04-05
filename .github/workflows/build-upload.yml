@@ -39,6 +39,7 @@ jobs:
           ./target/release/ => /home/debian/artifacts
         ignore: |
           !mellow
+        delete: true
     - uses: appleboy/ssh-action@v1.0.3
       with:
         host: ${{ secrets.SERVER_SSH_IP }}
