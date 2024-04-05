@@ -6,7 +6,7 @@ use actix_web::{
 	Responder, HttpRequest, HttpResponse,
 	get, web, post
 };
-use ed25519_dalek::{ Verifier, Signature, VerifyingKey };
+use ed25519_dalek::{ Verifier, Signature, VerifyingKey, PUBLIC_KEY_LENGTH };
 use twilight_model::id::{
 	marker::{ UserMarker, GuildMarker },
 	Id
@@ -44,11 +44,15 @@ type HmacSha256 = Hmac<Sha256>;
 const API_KEY: &str = env!("API_KEY");
 const CARGO_PKG_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-const PUBLIC_KEY: Lazy<VerifyingKey> = Lazy::new(||
-	hex::decode(env!("DISCORD_PUBLIC_KEY"))
-		.map(|vec| VerifyingKey::from_bytes(&vec.try_into().unwrap()).unwrap())
-		.unwrap()
-);
+const PUBLIC_KEY: Lazy<VerifyingKey> = Lazy::new(|| {
+	let mut key = [0; PUBLIC_KEY_LENGTH];
+	hex::decode_to_slice(env!("DISCORD_PUBLIC_KEY"), &mut key).map_err(|x| {
+		println!("could not parse discord public key ({})", env!("DISCORD_PUBLIC_KEY"));
+		x
+	}).unwrap();
+
+	VerifyingKey::from_bytes(&key).unwrap()
+});
 const ABSOLUTESOLVER: &[u8] = env!("ABSOLUTESOLVER").as_bytes();
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
