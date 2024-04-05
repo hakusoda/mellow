@@ -36,6 +36,6 @@ jobs:
         key: ${{secrets.SERVER_SSH_KEY}}
         port: 22
         uploads: |
-          ./target/release/ => ./
+          ./target/release/ => /home/debian/artifacts
         ignore: |
           !mellow
