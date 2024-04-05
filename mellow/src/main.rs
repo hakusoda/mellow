@@ -75,6 +75,8 @@ async fn main() -> std::io::Result<()> {
 		.init()
 		.unwrap();
 
+	log::info!("starting mellow v{}", env!("CARGO_PKG_VERSION"));
+
 	let job_cancel = CancellationToken::new();
 	tokio::spawn(spawn_onboarding_job(job_cancel.clone()));
 	tokio::spawn(discord::gateway::initialise());
