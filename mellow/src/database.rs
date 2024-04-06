@@ -224,7 +224,7 @@ impl ServerCommand {
 			.await {
 				Some(x) => x,
 				None => {
-					let command: Self = serde_json::from_str(&DATABASE.from("mellow_server_slash_commands")
+					let command: Self = serde_json::from_str(&DATABASE.from("mellow_server_commands")
 						.select("document:visual_scripting_documents(name,kind,active,definition)")
 						.eq("name", &cache_key.1)
 						.eq("server_id", guild_id.to_string())
