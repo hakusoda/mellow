@@ -1,16 +1,16 @@
 use serde::{ Serialize, Deserialize };
+use chrono::Utc;
 use tracing::{ Instrument, info_span };
 use twilight_model::guild::PartialMember;
 
 use super::{ action_log::ActionLog, Server };
 use crate::{
-	util::unwrap_string_or_array,
 	cache::CACHES,
 	traits::{ QuickId, AvatarUrl, DisplayName },
 	syncing::{ RoleChange, RoleChangeKind, NicknameChange },
 	discord::{ ChannelMessage, create_channel_message },
 	database::UserConnection,
-	interaction::{ Embed, EmbedField, EmbedAuthor },
+	interaction::{ Embed, EmbedField, EmbedAuthor, EmbedFooter },
 	visual_scripting::ActionTrackerItem,
 	Result
 };
@@ -73,7 +73,6 @@ impl Server {
 				if value == 4 || value == 8 || value == 16 || value == 32 || (self.logging_types & value) == value {
 					match log {
 						ServerLog::ActionLog(payload) => {
-							let website_url = format!("https://hakumi.cafe/mellow/server/{}/settings/action_log", self.id);
 							if let Some(document) = payload.target_document.clone() {
 								let cache_key = (self.id, document.kind.clone());
 								let span = info_span!("cache.event_responses.write", ?cache_key);
@@ -82,30 +81,21 @@ impl Server {
 									.await;
 							}
 
-							let mut details: Vec<String> = vec![];
-							if payload.kind == "mellow.server.syncing.action.created" {
-								if let Some(name) = payload.data.get("name").and_then(unwrap_string_or_array) {
-									details.push(format!("* With name **{name}**"));
-								}
-								if let Some(requirements) = payload.data.get("requirements").and_then(|x| x.as_i64()) {
-									details.push(format!("* With {requirements} requirement(s)"));
-								}
-							}
-							if payload.kind == "mellow.server.syncing.action.created" || payload.kind == "mellow.server.syncing.action.updated" || payload.kind == "mellow.server.syncing.settings.updated" || payload.kind == "mellow.server.discord_logging.updated" || payload.kind == "mellow.server.automation.event.updated" {
-								details.push(format!("* *View the full details [here]({website_url})*"));
-							}
-
 							embeds.push(Embed {
-								author: Some(EmbedAuthor {
-									url: Some(website_url),
-									name: Some("New Action Log".into()),
-									icon_url: payload.author.avatar_url.clone()
+								footer: Some(EmbedFooter {
+									text: "Action Log".into(),
+									icon_url: payload.author.as_ref().and_then(|x| x.avatar_url.clone())
 								}),
-								description: Some(format!("### [{}](https://hakumi.cafe/user/{}) {}\n{}",
-									payload.author.display_name(),
-									payload.author.username,
+								timestamp: Some(Utc::now()),
+								description: Some(format!("### {} {}\n{}",
+									if let Some(ref author) = payload.author {
+										format!("[{}](https://hakumi.cafe/user/{})",
+											author.display_name(),
+											author.username
+										)
+									} else { "<:hakumi_squircled:1226111994655150090>  HAKUMI".into() },
 									payload.action_string(&self.id),
-									details.join("\n")
+									payload.details().join("\n")
 								)),
 								..Default::default()
 							});
@@ -148,8 +138,9 @@ impl Server {
 									),
 									ProfileSyncKind::NewMember => format!("{} joined and has been synced", member.display_name())
 								}),
-								author: Some(self.embed_author(&member, None)),
 								fields: Some(fields),
+								footer: Some(self.embed_footer(&member, Some("Member Sync Result"))),
+								timestamp: Some(Utc::now()),
 								..Default::default()
 							});
 						},
@@ -181,6 +172,10 @@ impl Server {
 						ServerLog::VisualScriptingDocumentResult { items, document_name } => {
 							embeds.push(Embed {
 								title: Some(format!("Result for <:document:1222904218499940395> {document_name}")),
+								footer: Some(EmbedFooter {
+									text: "Visual Script Processor Result".into(),
+									icon_url: None
+								}),
 								description: Some(items
 									.into_iter()
 									.map(|x| match x {
@@ -222,6 +217,13 @@ impl Server {
 			name: title.or_else(|| Some(member.display_name().into())),
 			icon_url: member.avatar_url(),
 			..Default::default()
+		}
+	}
+
+	fn embed_footer(&self, member: &PartialMember, title: Option<&str>) -> EmbedFooter {
+		EmbedFooter {
+			text: title.map(|x| x.to_string()).unwrap_or_else(|| member.display_name().into()),
+			icon_url: member.avatar_url()
 		}
 	}
 }

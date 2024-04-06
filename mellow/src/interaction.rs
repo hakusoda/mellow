@@ -1,4 +1,5 @@
 use serde::{ Serialize, Deserialize };
+use chrono::{ Utc, DateTime };
 use actix_web::web::Json;
 use serde_repr::*;
 use futures_util::StreamExt;
@@ -36,6 +37,8 @@ pub struct Embed {
 	pub title: Option<String>,
 	pub author: Option<EmbedAuthor>,
 	pub fields: Option<Vec<EmbedField>>,
+	pub footer: Option<EmbedFooter>,
+	pub timestamp: Option<DateTime<Utc>>,
 	pub description: Option<String>
 }
 
@@ -46,6 +49,8 @@ impl Default for Embed {
 			title: None,
 			author: None,
 			fields: None,
+			footer: None,
+			timestamp: None,
 			description: None
 		}
 	}
@@ -73,6 +78,12 @@ pub struct EmbedField {
 	pub name: String,
 	pub value: String,
 	pub inline: Option<bool>
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct EmbedFooter {
+	pub text: String,
+	pub icon_url: Option<String>
 }
 
 #[derive(Serialize, Deserialize)]
