@@ -118,38 +118,49 @@ pub async fn handle_request(body: String) -> ApiResult<Json<InteractionResponse>
 			InteractionData::ApplicationCommand(data) => {
 				if let Some(guild_id) = data.guild_id {
 					let command = ServerCommand::fetch(&guild_id, data.name.clone()).await?;
-					let token = payload.token.clone();
-					let member = payload.member.clone().unwrap();
-					let guild_id = guild_id.clone();
-					tokio::spawn(async move {
-						let (mut stream, tracker) = command.document.into_stream(Variable::create_map([
-							("member".into(), Variable::from_partial_member(payload.user.as_ref(), &member, &guild_id))
-						], None));
-						while let Some((element, variables)) = stream.next().await {
-							match element.kind {
-								ElementKind::GetLinkedPatreonCampaign => {
-									let server = Server::fetch(&guild_id).await?;
-									variables.write().await.set("campaign", crate::patreon::get_campaign(server.oauth_authorisations.first().unwrap()).await?.into());
-								},
-								ElementKind::InteractionReply(data) =>
-									edit_original_response(&token, InteractionResponseData::ChannelMessageWithSource {
-										flags: None,
-										embeds: None,
-										content: Some(data.resolve(&*variables.read().await))
-									}).await?,
-							_ => ()
+					if command.document.is_ready_for_stream() {
+						let token = payload.token.clone();
+						let member = payload.member.clone().unwrap();
+						let guild_id = guild_id.clone();
+						tokio::spawn(async move {
+							let (mut stream, tracker) = command.document.into_stream(Variable::create_map([
+								("member".into(), Variable::from_partial_member(payload.user.as_ref(), &member, &guild_id))
+							], None));
+							while let Some((element, variables)) = stream.next().await {
+								match element.kind {
+									ElementKind::GetLinkedPatreonCampaign => {
+										let server = Server::fetch(&guild_id).await?;
+										variables.write().await.set("campaign", crate::patreon::get_campaign(server.oauth_authorisations.first().unwrap()).await?.into());
+									},
+									ElementKind::InteractionReply(data) =>
+										edit_original_response(&token, InteractionResponseData::ChannelMessageWithSource {
+											flags: None,
+											embeds: None,
+											content: Some(data.resolve(&*variables.read().await))
+										}).await?,
+								_ => ()
+								}
 							}
-						}
-						tracker.send_logs(&guild_id).await?;
-						Ok::<(), crate::error::Error>(())
-					});
-					
-					return Ok(Json(InteractionResponse {
-						kind: InteractionResponseKind::DeferredChannelMessageWithSource,
-						data: Some(InteractionResponseData::DeferredChannelMessageWithSource {
-							flags: 64
-						})
-					}));
+							tracker.send_logs(&guild_id).await?;
+							Ok::<(), crate::error::Error>(())
+						});
+						
+						return Ok(Json(InteractionResponse {
+							kind: InteractionResponseKind::DeferredChannelMessageWithSource,
+							data: Some(InteractionResponseData::DeferredChannelMessageWithSource {
+								flags: 64
+							})
+						}));
+					} else {
+						return Ok(Json(InteractionResponse {
+							kind: InteractionResponseKind::ChannelMessageWithSource,
+							data: Some(InteractionResponseData::ChannelMessageWithSource {
+								flags: Some(64),
+								embeds: None,
+								content: Some("<:niko_yawn:1226170445242568755> this custom command currently does absolutely nothing... go tell a server admin about it!!!".into())
+							})
+						}));
+					}
 				} else {
 					if let Some(command) = COMMANDS.iter().find(|x| x.name == data.name) {
 						if let Some(callback) = command.slash_action {
