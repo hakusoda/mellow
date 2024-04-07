@@ -117,7 +117,17 @@ pub async fn handle_request(body: String) -> ApiResult<Json<InteractionResponse>
 		_ => match payload.data.as_ref().unwrap() {
 			InteractionData::ApplicationCommand(data) => {
 				if let Some(guild_id) = data.guild_id {
-					let command = ServerCommand::fetch(&guild_id, data.name.clone()).await?;
+					let command = match ServerCommand::fetch(&guild_id, data.name.clone()).await {
+						Ok(x) => x,
+						Err(x) => return Ok(Json(InteractionResponse {
+							kind: InteractionResponseKind::ChannelMessageWithSource,
+							data: Some(InteractionResponseData::ChannelMessageWithSource {
+								flags: Some(64),
+								embeds: None,
+								content: Some(format!("<:niko_yawn:1226170445242568755> an unexpected error occurred while fetching the information for this command... oopsie daisy!\n```sh\n{x}```"))
+							})
+						}))
+					};
 					if command.document.is_ready_for_stream() {
 						let token = payload.token.clone();
 						let member = payload.member.clone().unwrap();
