@@ -115,7 +115,7 @@ pub async fn member_update(event_data: &MemberUpdate) -> Result<()> {
 					match guild.verification_level {
 						GuildVerificationLevel::High => {
 							PENDING_VERIFICATION_TIMER.write().await.push((guild_id.clone(), event_data.user.id.clone(), SystemTime::now()));
-							println!("added user to PENDING_VERIFICATION_TIMER");
+							log::info!("added {} to PENDING_VERIFICATION_TIMER", event_data.user.id);
 							return Ok(());
 						},
 						_ => ()

@@ -93,7 +93,9 @@ async fn spawn_onboarding_job(stop_signal: CancellationToken) {
 	loop {
 		if let Ok(mut entries) = PENDING_VERIFICATION_TIMER.try_write() {
 			entries.retain(|entry| {
-				if entry.2.elapsed().unwrap() >= Duration::from_mins(10) {
+				// this is ten seconds under ten minutes to compensate for the job's sleeping time
+				if entry.2.elapsed().unwrap() >= Duration::from_secs(590) {
+					log::info!("removing {entry:?} from PENDING_VERIFICATION_TIMER");
 					let (guild_id, user_id, _) = entry.clone();
 					tokio::spawn(async move {
 						let document = database::get_server_event_response_tree(&guild_id, DocumentKind::MemberCompletedOnboardingEvent).await.unwrap();
