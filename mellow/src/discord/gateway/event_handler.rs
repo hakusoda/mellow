@@ -56,6 +56,24 @@ pub async fn process_element_for_member(element: &Element, variables: &Arc<RwLoc
 	})
 }
 
+pub async fn process_element_for_guild(element: &Element, variables: &Arc<RwLock<Variable>>, tracker: &mut ActionTracker) -> Result<bool> {
+	Ok(match &element.kind {
+		ElementKind::CreateMessage(data) => {
+			let variables = variables.read().await;
+			if let Some(channel_id) = data.channel_id.resolve(&variables) {
+				let channel_id = Id::new(channel_id.cast_str().parse()?);
+				let message = create_channel_message(&channel_id, ChannelMessage {
+					content: Some(data.content.clone().resolve(&variables)),
+					..Default::default()
+				}).await?;
+				tracker.created_message(&channel_id, &message.id);
+				true
+			} else { false }
+		},
+		_ => false
+	})
+}
+
 static PENDING_MEMBERS: RwLock<Vec<(Id<GuildMarker>, Id<UserMarker>)>> = RwLock::const_new(vec![]);
 
 pub async fn member_add(event_data: &MemberAdd) -> Result<()> {
@@ -152,7 +170,7 @@ pub async fn message_create(event_data: &MessageCreate) -> Result<()> {
 				match element.kind {
 					ElementKind::Reply(data) => {
 						if let Some(message) = data.reference.resolve(&*variables.read().await) {
-							create_channel_message(&event_data.channel_id.to_string(), ChannelMessage {
+							create_channel_message(&event_data.channel_id, ChannelMessage {
 								content: Some(data.value),
 								message_reference: Some(MessageReference {
 									message_id: message.get("id").cast_str().into()

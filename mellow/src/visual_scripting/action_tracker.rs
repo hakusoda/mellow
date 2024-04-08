@@ -1,6 +1,6 @@
 use serde::{ Serialize, Deserialize };
 use twilight_model::id::{
-	marker::GuildMarker,
+	marker::{ GuildMarker, ChannelMarker, MessageMarker },
 	Id
 };
 
@@ -45,6 +45,10 @@ impl ActionTracker {
 		self.items.push(ActionTrackerItem::KickedMember(user_id.to_string()));
 	}
 
+	pub fn created_message(&mut self, channel_id: &Id<ChannelMarker>, message_id: &Id<MessageMarker>) {
+		self.items.push(ActionTrackerItem::CreatedMessage(channel_id.clone(), message_id.clone()));
+	}
+
 	pub fn deleted_message(&mut self, channel_id: impl ToString, user_id: impl ToString) {
 		self.items.push(ActionTrackerItem::DeletedMessage(channel_id.to_string(), user_id.to_string()));
 	}
@@ -55,5 +59,6 @@ pub enum ActionTrackerItem {
 	AssignedMemberRole(String, String),
 	BannedMember(String),
 	KickedMember(String),
+	CreatedMessage(Id<ChannelMarker>, Id<MessageMarker>),
 	DeletedMessage(String, String)
 }

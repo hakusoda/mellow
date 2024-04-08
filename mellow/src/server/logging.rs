@@ -185,6 +185,8 @@ impl Server {
 											format!("* Banned <@{user_id}> from the server"),
 										ActionTrackerItem::KickedMember(user_id) =>
 											format!("* Kicked <@{user_id}> from the server"),
+										ActionTrackerItem::CreatedMessage(channel_id, message_id) =>
+											format!("* Sent a message in <#{channel_id}>: https://discord.com/channels/{}/{channel_id}/{message_id}", self.id),
 										ActionTrackerItem::DeletedMessage(channel_id, user_id) =>
 											format!("* Deleted a message in <#{channel_id}> by <@{user_id}>")
 									})

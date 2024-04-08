@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use serde::{ Serialize, Deserialize };
+use futures_util::StreamExt;
 use twilight_model::{
 	id::{
 		marker::{ RoleMarker, GuildMarker },
@@ -13,11 +14,17 @@ use crate::{
 	server::Server,
 	roblox::get_user_group_roles,
 	patreon::UserIdentityField,
-	discord::{ DiscordModifyMemberPayload, modify_member, get_guild_roles },
+	discord::{
+		gateway::event_handler::{ process_element_for_guild, process_element_for_member },
+		DiscordModifyMemberPayload,
+		modify_member, get_guild_roles
+	},
 	database::{
 		User, UserResponse, ProfileSyncAction, ProfileSyncActionKind, ProfileSyncActionRequirementKind, ProfileSyncActionRequirementsKind, UserConnection, UserConnectionKind,
+		get_server_event_response_tree,
 		DATABASE
 	},
+	visual_scripting::{ Variable, DocumentKind },
 	Result
 };
 
@@ -235,6 +242,31 @@ pub async fn sync_member(user: Option<&User>, member: &PartialMember, server: &S
 				.unwrap();
 		});
 	}
+
+	// TODO: better.
+	let member = member.clone();
+	let guild_id = server.id.clone();
+	let role_changes2 = role_changes.clone();
+	tokio::spawn(async move {
+		let document = get_server_event_response_tree(&guild_id, DocumentKind::MemberSynced).await.unwrap();
+		if document.is_ready_for_stream() {
+			let (mut stream, mut tracker) = document.into_stream(Variable::create_map([
+				("member", Variable::from_partial_member(None, &member, &guild_id)),
+				("guild_id", guild_id.to_string().into()),
+				("profile_changes", Variable::create_map([
+					("roles", Variable::create_map([
+						("added", role_changes2.iter().filter_map(|x| if matches!(x.kind, RoleChangeKind::Added) { Some(&x.target_id) } else { None }).collect::<Vec<&Id<RoleMarker>>>().into()),
+						("removed", role_changes2.iter().filter_map(|x| if matches!(x.kind, RoleChangeKind::Removed) { Some(&x.target_id) } else { None }).collect::<Vec<&Id<RoleMarker>>>().into())
+					], None))
+				], None))
+			], None));
+			while let Some((element, variables)) = stream.next().await {
+				if process_element_for_guild(&element, &variables, &mut tracker).await.unwrap() { break };
+				if process_element_for_member(&element, &variables, &mut tracker).await.unwrap() { break };
+			}
+			tracker.send_logs(&guild_id).await.unwrap();
+		}
+	});
 
 	Ok(SyncMemberResult {
 		server: server.clone(),

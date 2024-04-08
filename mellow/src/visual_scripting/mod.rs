@@ -40,7 +40,10 @@ pub enum DocumentKind {
 	#[serde(rename = "mellow.discord_event.message_create")]
 	MessageCreatedEvent,
 	#[serde(rename = "mellow.discord_event.member.completed_onboarding")]
-	MemberCompletedOnboardingEvent
+	MemberCompletedOnboardingEvent,
+
+	#[serde(rename = "mellow.event.member.synced")]
+	MemberSynced
 }
 
 impl ToString for DocumentKind {
@@ -76,6 +79,9 @@ pub enum ElementKind {
 	Reply(StringValueWithVariableReference),
 	#[serde(rename = "action.mellow.message.reaction.create")]
 	AddReaction(StringValueWithVariableReference),
+
+	#[serde(rename = "action.mellow.message.create")]
+	CreateMessage(Message),
 	#[serde(rename = "action.mellow.message.delete")]
 	DeleteMessage(VariableReference),
 
@@ -102,6 +108,12 @@ pub enum ElementKind {
 pub struct StringValueWithVariableReference {
 	pub value: String,
 	pub reference: VariableReference
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct Message {
+	pub content: Text,
+	pub channel_id: StatementInput
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -183,7 +195,7 @@ pub enum StatementInput {
 }
 
 impl StatementInput {
-	fn resolve(&self, root_variable: &Variable) -> Option<Variable> {
+	pub fn resolve(&self, root_variable: &Variable) -> Option<Variable> {
 		match self {
 			StatementInput::Match(value) => Some(value.into()),
 			StatementInput::Variable(reference) => reference.resolve(&root_variable)

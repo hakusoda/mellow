@@ -4,10 +4,11 @@ use tracing::{ Instrument, info_span };
 use serde_repr::{ Serialize_repr, Deserialize_repr };
 use twilight_model::{
 	id::{
-		marker::{ RoleMarker, UserMarker, GuildMarker },
+		marker::{ RoleMarker, UserMarker, GuildMarker, ChannelMarker },
 		Id
 	},
-	guild::{ Role, Member }
+	guild::{ Role, Member },
+	channel::Message
 };
 use percent_encoding::{ NON_ALPHANUMERIC, utf8_percent_encode };
 
@@ -96,7 +97,7 @@ impl Default for ChannelMessage {
 	}
 }
 
-pub async fn create_channel_message(channel_id: &String, payload: ChannelMessage) -> Result<()> {
+pub async fn create_channel_message(channel_id: &Id<ChannelMarker>, payload: ChannelMessage) -> Result<Message> {
 	post_json(format!("https://discord.com/api/v10/channels/{channel_id}/messages"), payload).await
 }
 

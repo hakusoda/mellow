@@ -144,6 +144,15 @@ impl<T> Into<Variable> for &Id<T> {
 	}
 }
 
+impl<T: Into<Variable>> Into<Variable> for Vec<T> {
+	fn into(self) -> Variable {
+		Variable {
+			kind: VariableKind::List(self.into_iter().map(|x| x.into()).collect()),
+			interpret_as: VariableInterpretAs::NonSpecific
+		}
+	}
+}
+
 impl Into<Variable> for twilight_model::user::User {
 	fn into(self) -> Variable {
 		Variable::create_map([

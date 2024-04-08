@@ -1,6 +1,6 @@
 use serde::{ Serialize, Deserialize };
 use twilight_model::id::{
-	marker::GuildMarker,
+	marker::{ GuildMarker, ChannelMarker },
 	Id
 };
 
@@ -19,7 +19,7 @@ pub struct Server {
 	pub actions: Vec<ProfileSyncAction>,
 	pub logging_types: u8,
 	pub default_nickname: Option<String>,
-	pub logging_channel_id: Option<String>,
+	pub logging_channel_id: Option<Id<ChannelMarker>>,
 	pub oauth_authorisations: Vec<UserConnectionOAuthAuthorisation>,
 	pub allow_forced_syncing: bool
 }
