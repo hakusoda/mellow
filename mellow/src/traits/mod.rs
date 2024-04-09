@@ -1,3 +1,6 @@
+mod partial;
+pub use partial::Partial;
+
 mod quick_id;
 pub use quick_id::QuickId;
 

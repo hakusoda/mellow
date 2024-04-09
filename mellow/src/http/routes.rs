@@ -6,6 +6,7 @@ use actix_web::{
 	Responder, HttpRequest, HttpResponse,
 	get, web, post
 };
+use serde_repr::Serialize_repr;
 use ed25519_dalek::{ Verifier, Signature, VerifyingKey, PUBLIC_KEY_LENGTH };
 use twilight_model::id::{
 	marker::{ UserMarker, GuildMarker },
@@ -104,10 +105,10 @@ async fn sync_member(request: HttpRequest, body: web::Json<SyncMemberPayload>, p
 		if let Some(user) = database::get_user_by_discord(&guild_id, &user_id).await? {
 			let member = member_into_partial(get_member(&guild_id, &user_id).await?);
 			return Ok(web::Json(if let Some(token) = &body.webhook_token {
-				sync_with_token(user, member, &guild_id, &token, false).await?
+				sync_with_token(user, member, &guild_id, &token, false, None).await?
 			} else if body.is_sign_up.is_some_and(|x| x) {
 				let result = if let Some(item) = SIGN_UPS.read().await.iter().find(|x| x.user_id == user_id && x.guild_id == guild_id) {
-					Some(sync_with_token(user, member, &guild_id, &item.interaction_token, true).await?)
+					Some(sync_with_token(user, member, &guild_id, &item.interaction_token, true, None).await?)
 				} else { None };
 				SIGN_UPS.write().await.retain(|x| x.user_id != user_id);
 
@@ -211,27 +212,68 @@ fn absolutesolver(request: &HttpRequest, body: impl ToString) -> Result<()> {
 #[derive(Serialize)]
 struct ApplicationCommand {
 	name: String,
-	description: String,
+	#[serde(rename = "type")]
+	kind: ApplicationCommandKind,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	description: Option<String>,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	dm_permission: Option<bool>,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	default_member_permissions: Option<String>
 }
 
+#[derive(Serialize_repr)]
+#[repr(u8)]
+enum ApplicationCommandKind {
+	Slash = 1,
+	User,
+	Message
+}
+
 #[post("/update_discord_commands")]
 async fn update_discord_commands(request: HttpRequest) -> ApiResult<HttpResponse> {
 	if request.headers().get("x-api-key").map_or(false, |x| x.to_str().unwrap() == API_KEY.to_string()) {
-		fetch::CLIENT.put(format!("https://discord.com/api/v10/applications/{APP_ID}/commands"))
-			.json(&COMMANDS.iter().map(|x| ApplicationCommand {
-				name: x.name.to_string(),
-				description: x.description.clone().unwrap_or("there is no description yet, how sad...".into()),
-				dm_permission: Some(!x.no_dm),
-				default_member_permissions: x.default_member_permissions.clone()
-			}).collect::<Vec<ApplicationCommand>>())
+		let mut commands: Vec<ApplicationCommand> = vec![];
+		for command in COMMANDS.iter() {
+			if command.is_user {
+				commands.push(ApplicationCommand {
+					name: command.name.to_string(),
+					kind: ApplicationCommandKind::User,
+					description: None,
+					dm_permission: Some(!command.no_dm),
+					default_member_permissions: command.default_member_permissions.clone()
+				});
+			}
+			if command.is_slash {
+				commands.push(ApplicationCommand {
+					name: command.name.to_string(),
+					kind: ApplicationCommandKind::Slash,
+					description: Some(command.description.clone().unwrap_or("there is no description yet, how sad...".into())),
+					dm_permission: Some(!command.no_dm),
+					default_member_permissions: command.default_member_permissions.clone()
+				});
+			}
+			if command.is_message {
+				commands.push(ApplicationCommand {
+					name: command.name.to_string(),
+					kind: ApplicationCommandKind::Message,
+					description: None,
+					dm_permission: Some(!command.no_dm),
+					default_member_permissions: command.default_member_permissions.clone()
+				});
+			}
+		}
+
+		println!("{}", fetch::CLIENT.put(format!("https://discord.com/api/v10/applications/{APP_ID}/commands"))
+			.json(&commands)
 			.header("content-type", "application/json")
 			.send()
 			.await
-			.unwrap();
+			.unwrap()
+			.text()
+			.await
+			.unwrap()
+		);
 		Ok(HttpResponse::Ok().finish())
 	} else { Err(ApiError::InvalidApiKey) }
 }

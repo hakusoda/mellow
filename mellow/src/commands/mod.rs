@@ -9,5 +9,6 @@ pub const COMMANDS: Lazy<Vec<Command>> = Lazy::new(|| vec![
 	server::setup(),
 	
 	syncing::sync(),
+	syncing::forcesync(),
 	syncing::forcesyncall()
 ]);

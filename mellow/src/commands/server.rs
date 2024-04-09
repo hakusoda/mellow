@@ -10,7 +10,7 @@ use crate::{
 };
 
 #[tracing::instrument(skip_all)]
-#[command(no_dm, description = "Connect this server to mellow.", default_member_permissions = "0")]
+#[command(slash, no_dm, description = "Connect this server to mellow.", default_member_permissions = "0")]
 pub async fn setup(interaction: Interaction) -> Result<SlashResponse> {
 	let guild_id = interaction.guild_id.unwrap();
 	Ok(if server_exists(&guild_id).await? {

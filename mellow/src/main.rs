@@ -36,11 +36,20 @@ mod interaction;
 mod visual_scripting;
 
 pub struct Command {
-	name: &'static str,
+	name: String,
 	no_dm: bool,
+	handler: fn(Interaction) -> BoxFuture<'static, Result<SlashResponse>>,
+	is_user: bool,
+	is_slash: bool,
+	is_message: bool,
 	description: Option<String>,
-	slash_action: Option<fn(Interaction) -> BoxFuture<'static, Result<SlashResponse>>>,
 	default_member_permissions: Option<String>
+}
+
+pub enum CommandKind {
+	Slash,
+	User,
+	Message
 }
 
 pub enum SlashResponse {

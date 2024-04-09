@@ -173,26 +173,24 @@ pub async fn handle_request(body: String) -> ApiResult<Json<InteractionResponse>
 					}
 				} else {
 					if let Some(command) = COMMANDS.iter().find(|x| x.name == data.name) {
-						if let Some(callback) = command.slash_action {
-							return Ok(Json(match callback(payload).await.map_err(|x| { println!("{x}"); x })? {
-								SlashResponse::Message { flags, content } =>
-									InteractionResponse {
-										kind: InteractionResponseKind::ChannelMessageWithSource,
-										data: Some(InteractionResponseData::ChannelMessageWithSource {
-											flags,
-											embeds: None,
-											content
-										})
-									},
-								SlashResponse::DeferMessage =>
-									InteractionResponse {
-										kind: InteractionResponseKind::DeferredChannelMessageWithSource,
-										data: Some(InteractionResponseData::DeferredChannelMessageWithSource {
-											flags: 64
-										})
-									}
-							}));
-						}
+						return Ok(Json(match (command.handler)(payload).await.map_err(|x| { println!("{x}"); x })? {
+							SlashResponse::Message { flags, content } =>
+								InteractionResponse {
+									kind: InteractionResponseKind::ChannelMessageWithSource,
+									data: Some(InteractionResponseData::ChannelMessageWithSource {
+										flags,
+										embeds: None,
+										content
+									})
+								},
+							SlashResponse::DeferMessage =>
+								InteractionResponse {
+									kind: InteractionResponseKind::DeferredChannelMessageWithSource,
+									data: Some(InteractionResponseData::DeferredChannelMessageWithSource {
+										flags: 64
+									})
+								}
+						}));
 					}
 				}
 				Ok(Json(InteractionResponse {
