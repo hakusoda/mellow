@@ -1,22 +1,31 @@
-#![feature(let_chains, duration_constructors)]
-use std::time::{ Duration, SystemTime };
+#![feature(let_chains, try_blocks, duration_constructors)]
+use std::{
+	sync::Arc,
+	time::{ Duration, SystemTime }
+};
 use tokio::sync::RwLock;
+use tracing::{ Level, info };
+use mimalloc::MiMalloc;
 use tokio_util::sync::CancellationToken;
-use tokio_stream::StreamExt;
-use simple_logger::SimpleLogger;
+use tracing_log::LogTracer;
 use twilight_model::{
 	id::{
 		marker::{ UserMarker, GuildMarker },
 		Id
 	},
+	guild::Permissions,
+	channel::message::MessageFlags,
 	application::interaction::Interaction
 };
+use tracing_subscriber::FmtSubscriber;
 
-use util::member_into_partial;
-use discord::{
-	gateway::event_handler::process_element_for_member,
-	get_member
+use error::ErrorKind;
+use model::{
+	discord::DISCORD_MODELS,
+	mellow::MELLOW_MODELS
 };
+use traits::Partial;
+use discord::INTERACTION;
 use visual_scripting::{ Variable, DocumentKind };
 
 mod http;
@@ -24,6 +33,7 @@ mod util;
 mod cache;
 mod error;
 mod fetch;
+mod model;
 mod traits;
 mod roblox;
 mod server;
@@ -35,15 +45,28 @@ mod database;
 mod interaction;
 mod visual_scripting;
 
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
+
+pub type Context = Arc<discord::gateway::Context>;
+
 pub struct Command {
 	name: String,
 	no_dm: bool,
-	handler: fn(Interaction) -> BoxFuture<'static, Result<SlashResponse>>,
+	handler: fn(Context, Interaction) -> BoxFuture<'static, Result<CommandResponse>>,
 	is_user: bool,
 	is_slash: bool,
 	is_message: bool,
 	description: Option<String>,
 	default_member_permissions: Option<String>
+}
+
+impl Command {
+	pub fn default_member_permissions(&self) -> Result<Option<Permissions>> {
+		Ok(if let Some(permissions) = self.default_member_permissions.as_ref() {
+			Some(Permissions::from_bits_truncate(permissions.parse()?))
+		} else { None })
+	}
 }
 
 pub enum CommandKind {
@@ -52,47 +75,62 @@ pub enum CommandKind {
 	Message
 }
 
-pub enum SlashResponse {
+pub enum CommandResponse {
 	Message {
-		flags: Option<u8>,
+		flags: Option<MessageFlags>,
 		content: Option<String>
 	},
-	DeferMessage
+	Defer
 }
 
-impl SlashResponse {
-	pub fn defer(interaction_token: impl Into<String>, callback: BoxFuture<'static, Result<()>>) -> SlashResponse {
+impl CommandResponse {
+	pub fn defer(interaction_token: impl Into<String>, callback: BoxFuture<'static, Result<()>>) -> Self {
 		let interaction_token = interaction_token.into();
 		tokio::spawn(async move {
 			if let Err(error) = callback.await {
-				discord::edit_original_response(interaction_token, interaction::InteractionResponseData::ChannelMessageWithSource {
-					flags: None,
-					embeds: None,
-					content: Some(format!("{error}\n{}", error.context))
-				}).await.unwrap();
+				tracing::error!("error during interaction: {}", error);
+				let (text, problem) = match &error.kind {
+					ErrorKind::TwilightHttpError(error) => (" while communicating with discord...", error.to_string()),
+					_ => (", not sure what exactly though!", error.to_string())
+				};
+				INTERACTION.update_response(&interaction_token)
+					.content(Some(&format!("<:niko_look_left:1227198516590411826> something unexpected happened{text}\n```diff\n- {problem}\n--- {}```", error.context))).unwrap()
+					.await.unwrap();
 			}
 		});
-		SlashResponse::DeferMessage
+		Self::Defer
+	}
+
+	pub fn ephemeral(content: impl Into<String>) -> Self {
+		Self::Message {
+			flags: Some(MessageFlags::EPHEMERAL),
+			content: Some(content.into())
+		}
 	}
 }
 
-#[actix_web::main]
+#[tokio::main]
 async fn main() -> std::io::Result<()> {
-	SimpleLogger::new()
-		.with_level(log::LevelFilter::Info)
-		.env()
-		.init()
-		.unwrap();
+	let subscriber = FmtSubscriber::builder()
+        .with_max_level(Level::INFO)
+        .finish();
 
-	log::info!("starting mellow v{}", env!("CARGO_PKG_VERSION"));
+    tracing::subscriber::set_global_default(subscriber)
+        .expect("setting default subscriber failed");
+
+	LogTracer::init().unwrap();
+
+	info!("starting mellow v{}", env!("CARGO_PKG_VERSION"));
 
 	let job_cancel = CancellationToken::new();
 	tokio::spawn(spawn_onboarding_job(job_cancel.clone()));
-	tokio::spawn(discord::gateway::initialise());
-	http::start().await?;
+
+	http::initialise().await?;
+	discord::gateway::initialise().await;
 
 	job_cancel.cancel();
 
+	info!("shutting down mellow...goodbye!");
 	Ok(())
 }
 
@@ -104,19 +142,20 @@ async fn spawn_onboarding_job(stop_signal: CancellationToken) {
 			entries.retain(|entry| {
 				// this is ten seconds under ten minutes to compensate for the job's sleeping time
 				if entry.2.elapsed().unwrap() >= Duration::from_secs(590) {
-					log::info!("removing {entry:?} from PENDING_VERIFICATION_TIMER");
+					info!("removing {entry:?} from PENDING_VERIFICATION_TIMER");
 					let (guild_id, user_id, _) = entry.clone();
 					tokio::spawn(async move {
-						let document = database::get_server_event_response_tree(&guild_id, DocumentKind::MemberCompletedOnboardingEvent).await.unwrap();
+						let document = MELLOW_MODELS.event_document(guild_id, DocumentKind::MemberCompletedOnboardingEvent).await.unwrap();
 						if document.is_ready_for_stream(){
-							let member = member_into_partial(get_member(&guild_id, &user_id).await.unwrap());
-							let (mut stream, mut tracker) = document.into_stream(Variable::create_map([
+							let member = DISCORD_MODELS.member(guild_id, user_id).await.unwrap().partial();
+							let variables = Variable::create_map([
 								("member", Variable::from_partial_member(None, &member, &guild_id))
-							], None));
-							while let Some((element, variables)) = stream.next().await {
-								if process_element_for_member(&element, &variables, &mut tracker).await.unwrap() { break }
-							}
-							tracker.send_logs(&guild_id).await.unwrap();
+							], None);
+							document
+								.process(variables)
+								.await.unwrap()
+								.send_logs(guild_id)
+								.await.unwrap();
 						}
 					});
 					false
@@ -130,7 +169,7 @@ async fn spawn_onboarding_job(stop_signal: CancellationToken) {
             }
 
             _ = stop_signal.cancelled() => {
-                log::info!("gracefully shutting down onboarding job");
+                info!("gracefully shutting down onboarding job");
                 break;
             }
         };

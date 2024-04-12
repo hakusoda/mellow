@@ -16,8 +16,8 @@ struct CommandArgs {
 
 fn create_handler() -> proc_macro2::TokenStream {
 	quote::quote! {
-		|interaction| Box::pin(async move {
-			inner(interaction).await
+		|context, interaction| Box::pin(async move {
+			inner(context, interaction).await
 		})
 	}
 }

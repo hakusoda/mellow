@@ -4,7 +4,7 @@ use tracing::{ Instrument, info_span };
 use crate::{
 	cache::CACHES,
 	fetch::get_json,
-	database::UserConnectionOAuthAuthorisation,
+	model::hakumi::user::connection::ConnectionOAuthAuthorisation,
 	visual_scripting::{ Variable, VariableKind },
 	Result
 };
@@ -57,7 +57,7 @@ pub struct Tier {
 	pub id: String
 }
 
-pub async fn get_user_memberships(oauth_authorisation: &UserConnectionOAuthAuthorisation) -> Result<UserIdentity> {
+pub async fn get_user_memberships(oauth_authorisation: &ConnectionOAuthAuthorisation) -> Result<UserIdentity> {
 	let access_token = &oauth_authorisation.access_token;
 	Ok(match CACHES.patreon_user_identities.get(access_token)
 		.instrument(info_span!("cache.patreon_user_identities.read", ?access_token))
@@ -115,7 +115,7 @@ struct IncludedItemAttributes {
 	patron_count: u64
 }
 
-pub async fn get_campaign(oauth_authorisation: &UserConnectionOAuthAuthorisation) -> Result<Campaign2> {
+pub async fn get_campaign(oauth_authorisation: &ConnectionOAuthAuthorisation) -> Result<Campaign2> {
 	let access_token = &oauth_authorisation.access_token;
 	Ok(match CACHES.patreon_campaigns.get(access_token)
 		.instrument(info_span!("cache.patreon_campaigns.read", ?access_token))

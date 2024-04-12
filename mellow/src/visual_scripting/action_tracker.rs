@@ -1,11 +1,12 @@
-use serde::{ Serialize, Deserialize };
 use twilight_model::id::{
 	marker::{ GuildMarker, ChannelMarker, MessageMarker },
 	Id
 };
 
 use crate::{
-	server::{ logging::ServerLog, Server },
+	error::Error,
+	model::mellow::MELLOW_MODELS,
+	server::logging::ServerLog,
 	Result
 };
 
@@ -22,15 +23,19 @@ impl ActionTracker {
 		}
 	}
 
-	pub async fn send_logs(self, guild_id: &Id<GuildMarker>) -> Result<()> {
+	pub async fn send_logs(self, guild_id: Id<GuildMarker>) -> Result<()> {
 		if !self.items.is_empty() {
-			let server = Server::fetch(guild_id).await?;
+			let server = MELLOW_MODELS.server(guild_id).await?;
 			server.send_logs(vec![ServerLog::VisualScriptingDocumentResult {
 				items: self.items,
 				document_name: self.document_name
 			}]).await?;
 		}
 		Ok(())
+	}
+
+	pub fn error(&mut self, source: Error) {
+		self.items.push(ActionTrackerItem::Error(source));
 	}
 
 	pub fn assigned_member_role(&mut self, user_id: impl ToString, role_id: impl ToString) {
@@ -54,8 +59,8 @@ impl ActionTracker {
 	}
 }
 
-#[derive(Serialize, Deserialize)]
 pub enum ActionTrackerItem {
+	Error(Error),
 	AssignedMemberRole(String, String),
 	BannedMember(String),
 	KickedMember(String),

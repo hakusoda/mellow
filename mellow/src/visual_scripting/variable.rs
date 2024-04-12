@@ -60,6 +60,10 @@ impl Variable {
 		}
 	}
 
+	pub fn cast_id<T>(&self) -> Id<T> {
+		Id::new(self.cast_str().parse().unwrap())
+	}
+
 	pub fn cast_str(&self) -> &str {
 		match &self.kind {
 			VariableKind::String(x) => x,
@@ -138,7 +142,7 @@ impl Into<Variable> for u64 {
 	}
 }
 
-impl<T> Into<Variable> for &Id<T> {
+impl<T> Into<Variable> for Id<T> {
 	fn into(self) -> Variable {
 		self.to_string().into()
 	}

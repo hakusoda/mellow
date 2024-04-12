@@ -1,3 +1,4 @@
+use std::ops::Deref;
 use twilight_model::guild::{
 	Member,
 	PartialMember
@@ -21,4 +22,26 @@ pub fn member_into_partial(member: Member) -> PartialMember {
 		roles: member.roles,
 		user: Some(member.user)
 	}
+}
+
+#[derive(Debug)]
+pub struct WithId<I, T> {
+	pub id: I,
+	pub inner: T
+}
+
+impl<I: Clone, T: Clone> WithId<I, T> {
+	pub fn cloned(&self) -> WithId<I, T> {
+		WithId {
+			id: self.id.clone(),
+			inner: self.inner.clone()
+		}
+	}
+}
+
+impl<I, T> Deref for WithId<I, T> {
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
 }

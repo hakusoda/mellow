@@ -1,18 +1,18 @@
 use serde::{ Serialize, Deserialize };
 use chrono::{ Utc, DateTime };
-use actix_web::web::Json;
 use serde_repr::*;
-use futures_util::StreamExt;
-use twilight_model::application::interaction::{ Interaction, InteractionData, InteractionType };
+use twilight_model::{
+	http::interaction::{ InteractionResponse, InteractionResponseData, InteractionResponseType },
+	channel::message::MessageFlags,
+	application::interaction::{ Interaction, InteractionData }
+};
 
 use crate::{
-	http::{ ApiError, ApiResult },
-	server::Server,
-	discord::edit_original_response,
+	discord::INTERACTION,
 	commands::COMMANDS,
 	database::ServerCommand,
-	visual_scripting::{ Variable, ElementKind },
-	SlashResponse
+	visual_scripting::Variable,
+	Result, Context, CommandResponse
 };
 
 #[derive(Deserialize_repr, Debug)]
@@ -21,14 +21,6 @@ pub enum ApplicationCommandKind {
 	ChatInput = 1,
 	User,
 	Message
-}
-
-#[derive(Serialize_repr, Debug)]
-#[repr(u8)]
-enum InteractionResponseKind {
-	Pong = 1,
-	ChannelMessageWithSource = 4,
-	DeferredChannelMessageWithSource
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -86,123 +78,100 @@ pub struct EmbedFooter {
 	pub icon_url: Option<String>
 }
 
-#[derive(Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum InteractionResponseData {
-	ChannelMessageWithSource {
-		flags: Option<u8>,
-		embeds: Option<Vec<Embed>>,
-		content: Option<String>
-	},
-	DeferredChannelMessageWithSource {
-		flags: u8
-	}
-}
-
-// i don't like this structure
-#[derive(Serialize)]
-pub struct InteractionResponse {
-	#[serde(rename = "type")]
-	kind: InteractionResponseKind,
-	data: Option<InteractionResponseData>
-}
-
-pub async fn handle_request(body: String) -> ApiResult<Json<InteractionResponse>> {
-	let payload: Interaction = serde_json::from_str(&body).unwrap();
-	match payload.kind {
-		InteractionType::Ping => Ok(Json(InteractionResponse {
-			kind: InteractionResponseKind::Pong,
-			data: None
-		})),
-		_ => match payload.data.as_ref().unwrap() {
-			InteractionData::ApplicationCommand(data) => {
-				if let Some(guild_id) = data.guild_id {
-					let command = match ServerCommand::fetch(&guild_id, data.name.clone()).await {
-						Ok(x) => x,
-						Err(x) => return Ok(Json(InteractionResponse {
-							kind: InteractionResponseKind::ChannelMessageWithSource,
-							data: Some(InteractionResponseData::ChannelMessageWithSource {
-								flags: Some(64),
-								embeds: None,
-								content: Some(format!("<:niko_yawn:1226170445242568755> an unexpected error occurred while fetching the information for this command... oopsie daisy!\n```sh\n{x}```"))
+async fn parse_interaction(context: Context, interaction: Interaction) -> Result<InteractionResponse> {
+	match interaction.data.as_ref().unwrap() {
+		InteractionData::ApplicationCommand(data) => {
+			if let Some(guild_id) = data.guild_id {
+				let command = match ServerCommand::fetch(&guild_id, data.name.clone()).await {
+					Ok(x) => x,
+					Err(x) => {
+						tracing::error!("error while fetching server command (guild_id={}) (name={}) {}", guild_id, data.name, x);
+						return Ok(InteractionResponse {
+							kind: InteractionResponseType::ChannelMessageWithSource,
+							data: Some(InteractionResponseData {
+								flags: Some(MessageFlags::EPHEMERAL),
+								content: Some(format!("<:niko_yawn:1226170445242568755> an unexpected error occurred while fetching the information for this command... oopsie daisy!\n```sh\n{x}```")),
+								..Default::default()
 							})
-						}))
-					};
-					if command.document.is_ready_for_stream() {
-						let token = payload.token.clone();
-						let member = payload.member.clone().unwrap();
-						let guild_id = guild_id.clone();
-						tokio::spawn(async move {
-							let (mut stream, tracker) = command.document.into_stream(Variable::create_map([
-								("member".into(), Variable::from_partial_member(payload.user.as_ref(), &member, &guild_id))
-							], None));
-							while let Some((element, variables)) = stream.next().await {
-								match element.kind {
-									ElementKind::GetLinkedPatreonCampaign => {
-										let server = Server::fetch(&guild_id).await?;
-										variables.write().await.set("campaign", crate::patreon::get_campaign(server.oauth_authorisations.first().unwrap()).await?.into());
-									},
-									ElementKind::InteractionReply(data) =>
-										edit_original_response(&token, InteractionResponseData::ChannelMessageWithSource {
-											flags: None,
-											embeds: None,
-											content: Some(data.resolve(&*variables.read().await))
-										}).await?,
-								_ => ()
-								}
-							}
-							tracker.send_logs(&guild_id).await?;
-							Ok::<(), crate::error::Error>(())
-						});
-						
-						return Ok(Json(InteractionResponse {
-							kind: InteractionResponseKind::DeferredChannelMessageWithSource,
-							data: Some(InteractionResponseData::DeferredChannelMessageWithSource {
-								flags: 64
-							})
-						}));
-					} else {
-						return Ok(Json(InteractionResponse {
-							kind: InteractionResponseKind::ChannelMessageWithSource,
-							data: Some(InteractionResponseData::ChannelMessageWithSource {
-								flags: Some(64),
-								embeds: None,
-								content: Some("<:niko_yawn:1226170445242568755> this custom command currently does absolutely nothing... go tell a server admin about it!!!".into())
-							})
-						}));
+						})
 					}
-				} else {
-					if let Some(command) = COMMANDS.iter().find(|x| x.name == data.name) {
-						return Ok(Json(match (command.handler)(payload).await.map_err(|x| { println!("{x}"); x })? {
-							SlashResponse::Message { flags, content } =>
-								InteractionResponse {
-									kind: InteractionResponseKind::ChannelMessageWithSource,
-									data: Some(InteractionResponseData::ChannelMessageWithSource {
-										flags,
-										embeds: None,
-										content
-									})
-								},
-							SlashResponse::DeferMessage =>
-								InteractionResponse {
-									kind: InteractionResponseKind::DeferredChannelMessageWithSource,
-									data: Some(InteractionResponseData::DeferredChannelMessageWithSource {
-										flags: 64
-									})
-								}
-						}));
-					}
-				}
-				Ok(Json(InteractionResponse {
-					kind: InteractionResponseKind::ChannelMessageWithSource,
-					data: Some(InteractionResponseData::ChannelMessageWithSource {
-						flags: None,
-						embeds: None,
-						content: Some("PLACEHOLDER?!?!?!?".into())
+				};
+				if command.document.is_ready_for_stream() {
+					let user = interaction.user.clone();
+					let token = interaction.token.clone();
+					let member = interaction.member.clone().unwrap();
+					let guild_id = guild_id.clone();
+					tokio::spawn(async move {
+						let variables = Variable::create_map([
+							("member", Variable::from_partial_member(user.as_ref(), &member, &guild_id)),
+							("guild_id", guild_id.into()),
+							("interaction_token", token.into())
+						], None);
+						command.document
+							.process(variables)
+							.await?
+							.send_logs(guild_id)
+							.await?;
+						Ok::<(), crate::error::Error>(())
+					});
+					
+					Ok(InteractionResponse {
+						kind: InteractionResponseType::DeferredChannelMessageWithSource,
+						data: Some(InteractionResponseData {
+							flags: Some(MessageFlags::EPHEMERAL),
+							..Default::default()
+						})
 					})
-				}))
-			},
-			_ => Err(ApiError::NotImplemented)
-		}
+				} else {
+					Ok(InteractionResponse {
+						kind: InteractionResponseType::ChannelMessageWithSource,
+						data: Some(InteractionResponseData {
+							flags: Some(MessageFlags::EPHEMERAL),
+							content: Some("<:niko_yawn:1226170445242568755> this custom command currently does absolutely nothing... go tell a server admin about it!!!".into()),
+							..Default::default()
+						})
+					})
+				}
+			} else if let Some(command) = COMMANDS.iter().find(|x| x.name == data.name) {
+				Ok(match (command.handler)(context, interaction).await.map_err(|x| { println!("{x}"); x })? {
+					CommandResponse::Message { flags, content } =>
+						InteractionResponse {
+							kind: InteractionResponseType::ChannelMessageWithSource,
+							data: Some(InteractionResponseData {
+								flags,
+								content,
+								..Default::default()
+							})
+						},
+					CommandResponse::Defer =>
+						InteractionResponse {
+							kind: InteractionResponseType::DeferredChannelMessageWithSource,
+							data: Some(InteractionResponseData {
+								flags: Some(MessageFlags::EPHEMERAL),
+								..Default::default()
+							})
+						}
+				})
+			} else {
+				Ok(InteractionResponse {
+					kind: InteractionResponseType::ChannelMessageWithSource,
+					data: Some(InteractionResponseData {
+						content: Some("<:niko_look_left:1227198516590411826> erm... this command hasn't been implemented yet...".into()),
+						..Default::default()
+					})
+				})
+			}
+		},
+		_ => unimplemented!()
 	}
+}
+
+#[tracing::instrument(skip(context), level = "trace")]
+pub async fn handle_interaction(context: Context, interaction: Interaction) -> Result<()> {
+	let id = interaction.id.clone();
+	let token = interaction.token.clone();
+	let response = parse_interaction(context, interaction).await?;
+	INTERACTION.create_response(id, &token, &response).await?;
+
+	Ok(())
 }

@@ -1,16 +1,26 @@
+use std::sync::{
+	atomic::{ Ordering, AtomicBool },
+	Arc
+};
 use twilight_model::gateway::{
 	payload::outgoing::update_presence::UpdatePresencePayload,
 	presence::{ Status, Activity, ActivityType }
 };
-use twilight_gateway::{ Event, Shard, Config, Intents, ShardId };
+use twilight_gateway::{ Shard, Config, Intents, ShardId, CloseFrame };
 
-use crate::server::{ logging::ServerLog, Server };
+pub use context::Context;
 
+mod context;
 pub mod event_handler;
 
-#[tracing::instrument]
 pub async fn initialise() {
-	let config = Config::builder(env!("DISCORD_TOKEN").to_string(), Intents::GUILD_MEMBERS | Intents::MESSAGE_CONTENT | Intents::GUILD_MESSAGES)
+	tracing::info!("initialising discord gateway");
+
+	let config = Config::builder(
+		env!("DISCORD_TOKEN").to_string(),
+			Intents::GUILDS | Intents::GUILD_MEMBERS | Intents::GUILD_MESSAGES |
+			Intents::MESSAGE_CONTENT
+	)
 		.presence(UpdatePresencePayload::new(vec![Activity {
 			id: None,
 			url: None,
@@ -31,11 +41,18 @@ pub async fn initialise() {
 		}.into()], false, None, Status::Online).unwrap())
 		.build();
 	let mut shard = Shard::with_config(ShardId::ONE, config);
-	while !shard.status().is_identified() {
-		shard.next_message().await.unwrap();
-	}
+	let context = Arc::new(Context::new(shard.sender()));
+	
+	let term = Arc::new(AtomicBool::new(false));
+    signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&term)).unwrap();
 
 	loop {
+		if term.load(Ordering::Relaxed) {
+			tracing::info!("SIGINT received, shutting down gateway...");
+			shard.close(CloseFrame::NORMAL).await.unwrap();
+			break;
+		}
+
 		let event = match shard.next_event().await {
 			Ok(event) => event,
 			Err(source) => {
@@ -48,30 +65,13 @@ pub async fn initialise() {
 			}
 		};
 
-		match event {
-			Event::MemberAdd(event_data) => {
-				tokio::spawn(async move {
-					if let Err(error) = event_handler::member_add(&event_data).await {
-						Server::fetch(&event_data.guild_id).await.unwrap().send_logs(vec![ServerLog::VisualScriptingProcessorError {
-							error: error.to_string(),
-							document_name: "New Member Event".into()
-						}]).await.unwrap();
-					}
-				});
-			},
-			Event::MemberUpdate(event_data) => {
-				tokio::spawn(async move {
-					event_handler::member_update(&event_data).await.unwrap();
-				});
-			},
-			Event::MessageCreate(event_data) => {
-				if !event_data.author.bot {
-					tokio::spawn(async move {
-						event_handler::message_create(&event_data).await.unwrap();
-					});
-				}
-			},
-			_ => ()
-		}
+		let context = Arc::clone(&context);
+		tokio::spawn(async move {
+			let ctx = Arc::clone(&context);
+			match context.handle_event(ctx, event).await {
+				Ok(_) => (),
+				Err(source) => tracing::warn!(?source, "error handling event")
+			}
+		});
 	}
 }

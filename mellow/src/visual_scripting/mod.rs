@@ -1,5 +1,24 @@
+use uuid::Uuid;
 use serde::{ Serialize, Deserialize };
+use futures_util::StreamExt;
+use twilight_http::request::{
+	channel::reaction::RequestReactionType,
+	AuditLogReason
+};
+use twilight_model::id::Id;
 
+use crate::{
+	model::{
+		discord::DISCORD_MODELS,
+		hakumi::HAKUMI_MODELS,
+		mellow::MELLOW_MODELS
+	},
+	traits::{ WithId, Partial },
+	server::logging::{ ServerLog, ProfileSyncKind },
+	discord::{ CLIENT, INTERACTION },
+	syncing::sync_single_user,
+	Result
+};
 use variable::VariableReference;
 
 pub mod stream;
@@ -12,7 +31,7 @@ pub use action_tracker::{ ActionTracker, ActionTrackerItem };
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct Document {
-	//pub id: Uuid,
+	pub id: Uuid,
 	pub name: String,
 	pub kind: DocumentKind,
 	pub active: bool,
@@ -20,8 +39,145 @@ pub struct Document {
 }
 
 impl Document {
-	pub fn into_stream(self, variables: Variable) -> (ElementStream, ActionTracker) {
-		(ElementStream::new(self.definition, variables), ActionTracker::new(self.name))
+	/*pub async fn process<F: AsyncFnMut(Element, Arc<RwLock<Variable>>, &mut ActionTracker) -> Result<ProcessorResult>>(&self, variables: Variable, mut f: F) -> Result<ActionTracker> {
+		let mut stream = ElementStream::new(self.definition.clone(), variables);
+		let mut tracker = ActionTracker::new(self.name.clone());
+		while let Some((element, variables)) = stream.next().await {
+			match f(element, variables, &mut tracker).await {
+				Ok(result) => match result {
+					ProcessorResult::Break => break,
+					_ => ()
+				},
+				Err(source) => {
+					tracker.error(source);
+					break;
+				}
+			}
+		}
+
+		Ok(tracker)
+	}*/
+	pub async fn process(&self, variables: Variable) -> Result<ActionTracker> {
+		let mut stream = ElementStream::new(self.definition.clone(), variables);
+		let mut tracker = ActionTracker::new(self.name.clone());
+		while let Some((element, variables)) = stream.next().await {
+			let result: Result<()> = try {
+				match element.kind {
+					ElementKind::BanMember(reference) => {
+						if let Some(member) = reference.resolve(&*variables.read().await){
+							let user_id = member.get("id").cast_id();
+							CLIENT.create_ban(member.get("guild_id").cast_id(), user_id)
+								.reason("Triggered by a visual scripting element")?
+								.await?;
+							tracker.banned_member(user_id);
+							break;
+						}
+					},
+					ElementKind::KickMember(reference) => {
+						if let Some(member) = reference.resolve(&*variables.read().await) {
+							let user_id = member.get("id").cast_id();
+							CLIENT.remove_guild_member(member.get("guild_id").cast_id(), user_id)
+								.reason("Triggered by a visual scripting element")?
+								.await?;
+							tracker.kicked_member(user_id);
+							break;
+						}
+					},
+					ElementKind::AssignRoleToMember(data) => {
+						if let Some(member) = data.reference.resolve(&*variables.read().await) {
+							let user_id = member.get("id").cast_id();
+							CLIENT.add_guild_member_role(member.get("guild_id").cast_id(), user_id, Id::new(data.value.parse()?))
+								.reason("Triggered by a visual scripting element")?
+								.await?;
+							tracker.assigned_member_role(user_id, &data.value);
+						}
+					},
+					ElementKind::SyncMember => {
+						if let Some(member) = Some(variables.read().await.get("member")) {
+							let user_id = member.get("id").cast_id();
+							let guild_id = member.get("guild_id").cast_id();
+							if let Some(user) = HAKUMI_MODELS.user_by_discord(guild_id, user_id).await? {
+								let server = MELLOW_MODELS.server(guild_id).await?;
+								let member = DISCORD_MODELS.member(guild_id, user_id).await?.value().partial().with_id(user_id);
+								let result = sync_single_user(server.value(), user.value(), &member, None).await?;
+								if result.profile_changed {
+									MELLOW_MODELS.server(result.server_id)
+										.await?
+										.send_logs(vec![ServerLog::ServerProfileSync {
+											kind: ProfileSyncKind::NewMember,
+											member: member.cloned(),
+											forced_by: None,
+											role_changes: result.role_changes.clone(),
+											nickname_change: result.nickname_change.clone(),
+											relevant_connections: result.relevant_connections.clone()
+										}])
+										.await?;
+								}
+							}
+						}
+					},
+					ElementKind::CreateMessage(data) => {
+						let variables = &*variables.read().await;
+						if let Some(channel_id) = data.channel_id.resolve(variables) {
+							let channel_id = channel_id.cast_id();
+							let message = CLIENT.create_message(channel_id)
+								.content(&data.content.clone().resolve(variables))?
+								.await?
+								.model()
+								.await?;
+							tracker.created_message(&channel_id, &message.id);
+						}
+					},
+					ElementKind::Reply(data) => {
+						if let Some(message) = data.reference.resolve(&*variables.read().await) {
+							CLIENT.create_message(message.get("channel_id").cast_id())
+								.content(&data.value)?
+								.reply(message.get("id").cast_id())
+								.await?;
+						}
+					},
+					ElementKind::AddReaction(data) => {
+						if let Some(message) = data.reference.resolve(&*variables.read().await) {
+							CLIENT.create_reaction(message.get("channel_id").cast_id(), message.get("id").cast_id(), &if data.value.contains(':') {
+								let mut split = data.value.split(':');
+								RequestReactionType::Custom { name: split.next(), id: Id::new(split.next().unwrap().parse()?) }
+							} else { RequestReactionType::Unicode { name: &data.value }}).await?;
+						}
+					},
+					ElementKind::DeleteMessage(data) => {
+						if let Some(message) = data.resolve(&*variables.read().await) {
+							let channel_id = message.get("channel_id").cast_id();
+							CLIENT.delete_message(channel_id, message.get("id").cast_id())
+								.reason("Triggered by a visual scripting element")?
+								.await?;
+							tracker.deleted_message(channel_id, message.get("author").get("id").cast_str());
+						}
+					},
+					ElementKind::GetLinkedPatreonCampaign => {
+						let guild_id = variables.read().await.get("guild_id").cast_id();
+						let server = MELLOW_MODELS.server(guild_id).await?;
+						variables.write().await.set("campaign", crate::patreon::get_campaign(server.oauth_authorisations.first().unwrap()).await?.into());
+					},
+					ElementKind::InteractionReply(data) => {
+						let variables = &*variables.read().await;
+						let token = variables.get("interaction_token").cast_str();
+						INTERACTION.update_response(token)
+							.content(Some(&data.resolve(&variables)))?
+							.await?;
+					},
+					_ => ()
+				}
+			};
+			match result {
+				Ok(_) => (),
+				Err(source) => {
+					tracker.error(source);
+					break;
+				}
+			}
+		}
+
+		Ok(tracker)
 	}
 
 	pub fn is_ready_for_stream(&self) -> bool {
@@ -49,7 +205,7 @@ pub enum DocumentKind {
 impl ToString for DocumentKind {
 	fn to_string(&self) -> String {
 		// how silly is this? how silly? AHHHHHHHhhhhhh
-		let string = serde_json::to_string(self).unwrap();
+		let string = simd_json::to_string(self).unwrap();
 		let chars = string.chars().skip(1);
 		chars.clone().take(chars.count() - 1).collect()
 	}

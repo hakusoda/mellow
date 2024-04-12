@@ -7,15 +7,17 @@ use derive_more::{ Error, Display };
 
 pub mod routes;
 
-pub async fn start() -> std::io::Result<()> {
-	HttpServer::new(||
-		App::new()
+#[tracing::instrument]
+pub async fn initialise() -> std::io::Result<()> {
+	tokio::spawn(
+		HttpServer::new(|| App::new()
 			.wrap(Logger::new("%r  →  %s, %b bytes, took %Dms"))
 			.configure(routes::configure)
-	)
+		)
 		.bind(("127.0.0.1", 8080))?
 		.run()
-		.await
+	);
+	Ok(())
 }
 
 #[derive(Debug, Display, Error)]
@@ -26,17 +28,11 @@ pub enum ApiError {
 	#[display(fmt = "invalid_api_key")]
 	InvalidApiKey,
 
-	#[display(fmt = "invalid_signature")]
-	InvalidSignature,
-
 	#[display(fmt = "user_not_found")]
 	UserNotFound,
 
 	#[display(fmt = "sign_up_not_found")]
 	SignUpNotFound,
-
-	#[display(fmt = "not_implemented")]
-	NotImplemented,
 
 	#[display(fmt = "unknown {}", _0)]
 	Unknown(crate::error::Error)
@@ -55,11 +51,9 @@ impl actix_web::error::ResponseError for ApiError {
 		match *self {
 			ApiError::Unknown(_) => StatusCode::INTERNAL_SERVER_ERROR,
 			ApiError::GenericInvalidRequest => StatusCode::BAD_REQUEST,
-			ApiError::InvalidApiKey |
-			ApiError::InvalidSignature => StatusCode::FORBIDDEN,
+			ApiError::InvalidApiKey => StatusCode::FORBIDDEN,
 			ApiError::UserNotFound |
-			ApiError::SignUpNotFound => StatusCode::NOT_FOUND,
-			ApiError::NotImplemented => StatusCode::NOT_IMPLEMENTED
+			ApiError::SignUpNotFound => StatusCode::NOT_FOUND
 		}
 	}
 }

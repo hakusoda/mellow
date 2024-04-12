@@ -7,20 +7,12 @@ use twilight_model::id::{
 };
 
 use crate::{
-	discord::{ Guild, GuildOnboarding },
 	patreon::{ Campaign2, UserIdentity },
 	database::ServerCommand,
 	visual_scripting::{ Document, DocumentKind }
 };
 
 pub static CACHES: Lazy<Caches> = Lazy::new(|| Caches {
-	discord_guilds: CacheBuilder::new(32)
-		.time_to_live(Duration::from_hours(1))
-		.build(),
-	discord_guild_onboarding: CacheBuilder::new(32)
-		.time_to_live(Duration::from_hours(1))
-		.build(),
-
 	event_responses: CacheBuilder::new(32)
 		.time_to_live(Duration::from_hours(1))
 		.build(),
@@ -38,9 +30,6 @@ pub static CACHES: Lazy<Caches> = Lazy::new(|| Caches {
 });
 
 pub struct Caches {
-	pub discord_guilds: Cache<Id<GuildMarker>, Guild>,
-	pub discord_guild_onboarding: Cache<String, GuildOnboarding>,
-
 	pub event_responses: Cache<(Id<GuildMarker>, DocumentKind), Document>,
 
 	pub patreon_campaigns: Cache<String, Campaign2>,

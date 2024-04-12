@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use serde::{ de::DeserializeOwned, Serialize };
+use serde::de::DeserializeOwned;
 use reqwest::{
 	header::HeaderMap,
 	Client, Method, IntoUrl
@@ -36,7 +36,7 @@ pub async fn fetch_json<U: IntoUrl + Debug, T: DeserializeOwned>(url: U, method:
 			Ok(if std::any::type_name::<T>() == std::any::type_name::<()>() {
 				serde_json::from_value(serde_json::Value::Null)?
 			} else {
-				serde_json::from_str(&x.text().await?)?
+				simd_json::from_slice(&mut x.bytes().await?.to_vec())?
 			})
 		},
 		Err(error) => Err(crate::error::ErrorKind::FormattedHttpError(url.to_string(), error.to_string()).into())
@@ -45,12 +45,4 @@ pub async fn fetch_json<U: IntoUrl + Debug, T: DeserializeOwned>(url: U, method:
 
 pub async fn get_json<U: IntoUrl + Debug, T: DeserializeOwned>(url: U, headers: Option<HeaderMap>) -> Result<T> {
 	fetch_json(url, Some(Method::GET), None, headers).await
-}
-
-pub async fn post_json<U: IntoUrl + Debug, T: DeserializeOwned, B: Serialize>(url: U, body: B) -> Result<T> {
-	fetch_json(url, Some(Method::POST), Some(serde_json::to_value(body)?), None).await
-}
-
-pub async fn patch_json<U: IntoUrl + Debug, T: DeserializeOwned, B: Serialize>(url: U, body: B) -> Result<T> {
-	fetch_json(url, Some(Method::PATCH), Some(serde_json::to_value(body)?), None).await
 }
