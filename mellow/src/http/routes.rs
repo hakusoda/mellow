@@ -193,7 +193,11 @@ fn absolutesolver(request: &HttpRequest, body: &[u8]) -> Result<()> {
 }
 
 fn app_command(command: &crate::Command, kind: CommandType) -> Result<Command> {
-	let mut builder = CommandBuilder::new(&command.name, command.description.clone().unwrap_or("there is no description yet, how sad...".into()), kind)
+	let description = match kind {
+		CommandType::User => "",
+		_ => command.description.as_ref().map_or("there is no description yet, how sad...", |x| x.as_str())
+	};
+	let mut builder = CommandBuilder::new(&command.name, description, kind)
 		.dm_permission(!command.no_dm);
 	if let Some(permissions) = command.default_member_permissions()? {
 		builder = builder.default_member_permissions(permissions);
