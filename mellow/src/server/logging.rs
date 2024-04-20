@@ -1,4 +1,4 @@
-use serde::{ Serialize, Deserialize };
+use serde::Deserialize;
 use chrono::Utc;
 use tracing::{ Instrument, info_span };
 use twilight_util::builder::embed::{ ImageSource, EmbedBuilder, EmbedFooterBuilder };
@@ -21,7 +21,7 @@ use crate::{
 		hakumi::user::Connection,
 		mellow::server::Server
 	},
-	traits::{ QuickId, AvatarUrl, DisplayName },
+	traits::{ AvatarUrl, DisplayName },
 	syncing::{ RoleChange, RoleChangeKind, NicknameChange },
 	discord::CLIENT,
 	visual_scripting::ActionTrackerItem,
@@ -37,19 +37,15 @@ pub enum ServerLog {
 	ServerProfileSync {
 		kind: ProfileSyncKind,
 		member: WithId<Id<UserMarker>, PartialMember>,
-		forced_by: Option<PartialMember>,
+		forced_by: Option<WithId<Id<UserMarker>, PartialMember>>,
 		role_changes: Vec<RoleChange>,
 		nickname_change: Option<NicknameChange>,
 		relevant_connections: Vec<Connection>
 	} = 1 << 1,
+	#[serde(skip)]
 	UserCompletedOnboarding {
-		member: PartialMember
+		member: WithId<Id<UserMarker>, PartialMember>
 	} = 1 << 2,
-	EventResponseResult {
-		invoker: PartialMember,
-		event_kind: String,
-		member_result: EventResponseResultMemberResult
-	} = 1 << 3,
 	VisualScriptingProcessorError {
 		error: String,
 		document_name: String
@@ -59,13 +55,6 @@ pub enum ServerLog {
 		items: Vec<ActionTrackerItem>,
 		document_name: String
 	} = 1 << 5
-}
-
-#[derive(Deserialize, Serialize)]
-pub enum EventResponseResultMemberResult {
-	None,
-	Banned,
-	Kicked
 }
 
 impl ServerLog {
@@ -119,7 +108,7 @@ impl Server {
 						ServerLog::ServerProfileSync { kind, member, forced_by, role_changes, nickname_change, relevant_connections } => {
 							let mut embed = EmbedBuilder::new()
 								.title(match kind {
-									ProfileSyncKind::Default => forced_by.and_then(|x| if x.id() == member.id() { None } else { Some(x) }).map_or_else(
+									ProfileSyncKind::Default => forced_by.and_then(|x| if x.id == member.id { None } else { Some(x) }).map_or_else(
 										|| format!("{} synced their profile", member.display_name()),
 										|x| format!("{} forcefully synced {}'s profile", x.display_name(), member.display_name())
 									),
@@ -161,17 +150,6 @@ impl Server {
 							embeds.push(EmbedBuilder::new()
 								.title(format!("{} completed onboarding", member.display_name()))
 								.author(self.embed_author(&member, None))
-								.build()
-							);
-						},
-						ServerLog::EventResponseResult { invoker, event_kind, member_result} => {
-							embeds.push(EmbedBuilder::new()
-								.title(match member_result {
-									EventResponseResultMemberResult::Banned => format!("{} was banned", invoker.display_name()),
-									EventResponseResultMemberResult::Kicked => format!("{} was kicked", invoker.display_name()),
-									_ => "no result".into()
-								})
-								.author(self.embed_author(&invoker, Some(format!("Event Response Result ({event_kind})"))))
 								.build()
 							);
 						},
@@ -228,9 +206,9 @@ impl Server {
 		Ok(())
 	}
 
-	fn embed_author(&self, member: &PartialMember, title: Option<String>) -> EmbedAuthor {
+	fn embed_author(&self, member: &WithId<Id<UserMarker>, PartialMember>, title: Option<String>) -> EmbedAuthor {
 		EmbedAuthor {
-			url: Some(format!("https://hakumi.cafe/mellow/server/{}/member/{}", self.id, member.id())),
+			url: Some(format!("https://hakumi.cafe/mellow/server/{}/member/{}", self.id, member.id)),
 			name: title.unwrap_or_else(|| member.display_name().into()),
 			icon_url: member.avatar_url(),
 			proxy_icon_url: None

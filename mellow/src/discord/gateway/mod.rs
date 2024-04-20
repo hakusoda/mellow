@@ -67,8 +67,7 @@ pub async fn initialise() {
 
 		let context = Arc::clone(&context);
 		tokio::spawn(async move {
-			let ctx = Arc::clone(&context);
-			match context.handle_event(ctx, event).await {
+			match context.handle_event(event).await {
 				Ok(_) => (),
 				Err(source) => tracing::warn!(?source, "error handling event")
 			}

@@ -31,8 +31,8 @@ use crate::{
 	cast
 };
 
-#[tracing::instrument(skip(user, member))]
-pub async fn sync_with_token(server: &Server, user: &User, member: WithId<Id<UserMarker>, PartialMember>, interaction_token: &String, is_onboarding: bool, forced_by: Option<PartialMember>) -> Result<SyncMemberResult> {
+#[tracing::instrument(skip(user, member, server))]
+pub async fn sync_with_token(server: &Server, user: &User, member: WithId<Id<UserMarker>, PartialMember>, interaction_token: &String, is_onboarding: bool, forced_by: Option<WithId<Id<UserMarker>, PartialMember>>) -> Result<SyncMemberResult> {
 	let result = sync_single_user(server, user, &member, None).await?;
 	let mut has_assigned_role = false;
 	let mut has_retracted_role = false;
@@ -79,7 +79,7 @@ pub async fn sync_with_token(server: &Server, user: &User, member: WithId<Id<Use
 	let mut server_logs: Vec<ServerLog> = vec![];
 	if is_onboarding {
 		server_logs.push(ServerLog::UserCompletedOnboarding {
-			member: member.clone()
+			member: member.cloned()
 		});
 	}
 
@@ -141,6 +141,7 @@ pub async fn forcesync(_context: Context, interaction: Interaction) -> Result<Co
 		return forceful_disabled_response(guild_id);
 	}
 
+	let author_id = interaction.author_id().unwrap();
 	let resolved = cast!(interaction.data.unwrap(), InteractionData::ApplicationCommand).unwrap().resolved.unwrap();
 	let (user_id, member) = resolved.members.into_iter().next().unwrap();
 	let mut member = member.partial();
@@ -148,7 +149,7 @@ pub async fn forcesync(_context: Context, interaction: Interaction) -> Result<Co
 	
 	if let Some(user) = HAKUMI_MODELS.user_by_discord(guild_id, user_id).await? {
 		return Ok(CommandResponse::defer(interaction.token.clone(), Box::pin(async move {
-			sync_with_token(server.value(), user.value(), member.with_id(user_id), &interaction.token, false, Some(interaction.member.unwrap())).await?;
+			sync_with_token(server.value(), user.value(), member.with_id(user_id), &interaction.token, false, Some(interaction.member.unwrap().with_id(author_id))).await?;
 			Ok(())
 		})));
 	}
@@ -197,14 +198,14 @@ pub async fn forcesyncall(context: Context, interaction: Interaction) -> Result<
 				logs.push(ServerLog::ServerProfileSync {
 					kind: ProfileSyncKind::Default,
 					member: partial,
-					forced_by: interaction.member.clone(),
+					forced_by: interaction.member.clone().map(|x| x.with_id(interaction.author_id().unwrap())),
 					role_changes: result.role_changes,
 					nickname_change: result.nickname_change,
 					relevant_connections: result.relevant_connections
 				});
 			}
 
-			total_synced += 1;
+			total_synced += 1
 		}
 
 		INTERACTION.update_response(&interaction.token)

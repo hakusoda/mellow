@@ -41,11 +41,11 @@ impl Context {
 		}
 	}
 
-	pub async fn handle_event(&self, context: crate::Context, event: Event) -> Result<()> {
+	pub async fn handle_event(self: crate::Context, event: Event) -> Result<()> {
 		tracing::info!("handle_event kind: {:?}", event.kind());
 		match event {
 			Event::InteractionCreate(event_data) => {
-				handle_interaction(context, event_data.0).await?;
+				handle_interaction(self, event_data.0).await?;
 			},
 			Event::MemberAdd(event_data) => {
 				DISCORD_MODELS.members.insert((event_data.guild_id, event_data.user.id), event_data.member.clone().into());
@@ -68,6 +68,7 @@ impl Context {
 					}
 				}
 				event_handler::member_update(&event_data).await?;
+				tracing::info!("done with member update");
 			},
 			Event::MemberRemove(event_data) => {
 				DISCORD_MODELS.members.remove(&(event_data.guild_id, event_data.user.id));
