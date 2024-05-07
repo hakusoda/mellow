@@ -87,14 +87,15 @@ impl MellowModels {
 			tracing::debug!("member_settings.read (guild_id={guild_id}) (user_id={user_id:?})");
 			item
 		} else {
-			let new_item: UserSettings = DATABASE.from("mellow_user_server_settings")
-				.select("user_connections")
+			let new_item = DATABASE.from("mellow_user_server_settings")
+				.select::<UserSettings>("user_connections")
 				.eq("user_id", user_id.to_string())
 				.eq("server_id", guild_id.to_string())
 				.limit(1)
-				.single()
+				.maybe_single()
 				.await?
-				.value;
+				.value
+				.unwrap_or_default();
 			tracing::debug!("member_settings.write (guild_id={guild_id}) (user_id={user_id})");
 			
 			self.member_settings.insert(key, new_item.clone());
