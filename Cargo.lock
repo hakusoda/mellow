@@ -1624,7 +1624,8 @@ checksum = "d231b230927b5e4ad203db57bbcbee2802f6bce620b1e4a9024a07d94e2907ec"
 
 [[package]]
 name = "postgrest"
-version = "0.1.0"
+version = "0.1.1"
+source = "git+https://github.com/hakusoda/postgrest-rs.git?tag=v0.1.1#c7d1ccbbd17a706fd7ccba3ca42324784ca8d96d"
 dependencies = [
  "bytes",
  "reqwest",
