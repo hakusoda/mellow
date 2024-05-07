@@ -1,0 +1,15 @@
+cargo-features = ["edition2024"]
+
+[package]
+name = "mellow_cache"
+description = "i am the one that caches, capeesh?"
+
+# this package is currently empty & unused, i'd like to base it on what's going on here: https://github.com/TeamHarTex/HarTex/tree/nightly/discord-frontend
+
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true

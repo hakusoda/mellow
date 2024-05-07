@@ -1,6 +1,15 @@
 [workspace]
-members = ["mellow", "macros"]
+members = ["crates/*"]
 resolver = "2"
+
+[workspace.package]
+authors = ["katsumi143 <32640219+katsumi143@users.noreply.github.com>"]
+edition = "2024"
+license = "GPL-3.0-only"
+version = "1.1.0"
+homepage = "https://github.com/hakusoda/mellow"
+repository = "https://github.com/hakusoda/mellow"
+rust-version = "1.79"
 
 [profile.dev]
 lto = false

@@ -1,0 +1,22 @@
+cargo-features = ["edition2024"]
+
+[package]
+name = "mellow_macros"
+description = "slash command proc-macros for mellow"
+
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = "2.0.58"
+quote = "1.0.35"
+darling = "0.20.8"
+proc-macro2 = "1.0.79"
