@@ -31,6 +31,7 @@ pub use connection::Connection;
 #[derive(Clone, Debug, Deserialize)]
 pub struct User {
 	pub id: HakuId<UserMarker>,
+	#[serde(default)]
 	pub connections: Vec<Connection>
 }
 

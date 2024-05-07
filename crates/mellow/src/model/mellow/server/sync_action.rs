@@ -41,6 +41,7 @@ pub enum SyncActionKind {
 
 #[derive(Debug, Deserialize)]
 pub struct Reasoning {
+	#[serde(default)]
 	pub reason: Option<String>/*,
 	pub user_facing_details: Option<String>*/
 }

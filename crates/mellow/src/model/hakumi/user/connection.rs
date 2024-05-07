@@ -19,7 +19,7 @@ pub struct Connection {
 	pub username: Option<String>,
 	#[serde(default)]
 	pub display_name: Option<String>,
-	#[serde(deserialize_with = "deserialise_nullable_vec")]
+	#[serde(default, deserialize_with = "deserialise_nullable_vec")]
 	pub oauth_authorisations: Vec<OAuthAuthorisation>
 }
 

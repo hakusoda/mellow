@@ -20,13 +20,15 @@ pub use user_settings::UserSettings;
 #[derive(Debug, Deserialize)]
 pub struct Server {
 	pub id: Id<GuildMarker>,
-	#[serde(deserialize_with = "deserialise_nullable_vec")]
+	#[serde(default, deserialize_with = "deserialise_nullable_vec")]
 	pub actions: Vec<SyncAction>,
 	pub logging_types: u8,
+	#[serde(default)]
 	pub default_nickname: Option<String>,
+	#[serde(default)]
 	pub logging_channel_id: Option<Id<ChannelMarker>>,
 	pub allow_forced_syncing: bool,
-	#[serde(deserialize_with = "deserialise_nullable_vec")]
+	#[serde(default, deserialize_with = "deserialise_nullable_vec")]
 	pub oauth_authorisations: Vec<OAuthAuthorisation>
 }
 
