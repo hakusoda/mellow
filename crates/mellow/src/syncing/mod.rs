@@ -286,6 +286,7 @@ pub async fn sync_member(user: Option<&User>, member: &CachedMember, server: &Se
 
 	let profile_changed = !member_status.removed() && !role_changes.is_empty() || nickname_change.is_some();
 	if profile_changed {
+		// there appears to be a strange issue where this rarely results in the entire gateway thread hanging, although i'm not entirely sure this is the actual source...
 		let mut request = CLIENT.update_guild_member(server.id, member.user_id);
 		if !role_changes.is_empty() {
 			request = request.roles(&roles);

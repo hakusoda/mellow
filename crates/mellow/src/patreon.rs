@@ -11,6 +11,7 @@ use crate::{
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct UserIdentity {
+	#[serde(default)]
 	pub included: Option<Vec<UserIdentityField>>
 }
 
@@ -66,6 +67,7 @@ pub async fn get_user_memberships(oauth_authorisation: &OAuthAuthorisation) -> R
 			None => {
 				let mut headers = reqwest::header::HeaderMap::new();
 				headers.insert("authorization", format!("{} {}", oauth_authorisation.token_type, access_token).parse().unwrap());
+				headers.insert("content-type", "application/json".parse().unwrap());
 
 				let identity: UserIdentity = get_json("https://www.patreon.com/api/oauth2/v2/identity?include=memberships.campaign,memberships.currently_entitled_tiers&fields%5Bmember%5D=patron_status", Some(headers)).await?;
 				let span = info_span!("cache.patreon_user_identities.write", ?access_token);
