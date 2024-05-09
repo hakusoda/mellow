@@ -126,7 +126,7 @@ pub async fn sync(_context: Context, interaction: Interaction) -> Result<Command
 	
 	let guild = DISCORD_MODELS.guild(guild_id).await?;
 	Ok(CommandResponse::ephemeral(
-		format!("# <:waving_hand:1225409285203431565> <:mellow_squircled:1225413361777508393>  mellow says konnichiwa (hello)!\nWelcome to *{}*, before you can start syncing here, you need to get set up with mellow!\nWhenever you're ready, tap [here](<https://discord.com/api/oauth2/authorize?client_id=1068554282481229885&redirect_uri=https%3A%2F%2Flocal-api.hakumi.cafe%2Fv0%2Fauth%2Fcallback%2Fmellow&response_type=code&scope=identify&state=sync.{}>) to proceed, it won't take long!\n\n*fancy knowing what mellow is? read up on it [here](<https://hakumi.cafe/docs/mellow>)!*", guild.name, guild_id)
+		format!("# <:waving_hand:1225409285203431565> <:mellow_squircled:1225413361777508393>  mellow says konnichiwa (hello)!\nWelcome to *{}*, before you can start syncing here, you need to get set up with mellow!\nWhenever you're ready, tap [here](<https://discord.com/api/oauth2/authorize?client_id=1068554282481229885&redirect_uri=https%3A%2F%2Fapi.hakumi.cafe%2Fv0%2Fauth%2Fcallback%2Fmellow&response_type=code&scope=identify&state=sync.{}>) to proceed, it won't take long!\n\n*fancy knowing what mellow is? read up on it [here](<https://hakumi.cafe/docs/mellow>)!*", guild.name, guild_id)
 	))
 }
 
