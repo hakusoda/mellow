@@ -49,13 +49,13 @@ impl Context {
 				event_handler::member_add(&event_data).await?;
 			},
 			Event::MemberUpdate(event_data) => {
+				event_handler::member_update(&event_data).await?;
 				for mut member in DISCORD_MODELS.members.iter_mut() {
 					if event_data.guild_id == member.key().0 && event_data.user.id == member.user_id {
 						member.update(&event_data);
 						break;
 					}
 				}
-				event_handler::member_update(&event_data).await?;
 			},
 			Event::MemberRemove(event_data) => {
 				DISCORD_MODELS.members.remove(&(event_data.guild_id, event_data.user.id));

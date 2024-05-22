@@ -120,6 +120,16 @@ impl Variable {
 		}
 	}
 
+	pub fn contains_one_of(&self, variable: &Variable) -> bool {
+		match &self.kind {
+			VariableKind::List(x) => match &variable.kind {
+				VariableKind::List(y) => x.iter().any(|x| y.iter().any(|y| x == y)),
+				_ => false
+			},
+			_ => false
+		}
+	}
+
 	pub fn starts_with(&self, variable: &Variable) -> bool {
 		match &self.kind {
 			VariableKind::List(x) => x.first().is_some_and(|x| x == variable),

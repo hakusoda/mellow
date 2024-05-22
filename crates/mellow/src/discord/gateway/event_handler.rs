@@ -46,14 +46,14 @@ pub async fn member_add(event_data: &MemberAdd) -> Result<()> {
 }
 
 pub async fn member_update(event_data: &MemberUpdate) -> Result<()> {
+	let guild_id = event_data.guild_id;
 	if !event_data.pending {
 		let key = (event_data.guild_id, event_data.user.id);
 		let pending = &PENDING_MEMBERS;
 		let mut pending = pending.write().await;
 		if pending.contains(&key) {
 			pending.retain(|x| *x != key);
-
-			let guild_id = event_data.guild_id;
+			
 			if event_data.roles.is_empty() {
 				let onboarding = DISCORD_MODELS.guild_onboarding(guild_id).await?;
 				if !onboarding.enabled {
@@ -79,6 +79,23 @@ pub async fn member_update(event_data: &MemberUpdate) -> Result<()> {
 						.await?;
 				}
 			}
+		}
+	}
+
+	if let Some(document) = MELLOW_MODELS.event_document(guild_id, DocumentKind::MemberUpdatedEvent).await? {
+		if document.is_ready_for_stream() {
+			let variables = Variable::create_map([
+				("old_member", match DISCORD_MODELS.members.get(&(guild_id, event_data.user.id)) {
+					Some(x) => Variable::from_member(x.value(), guild_id).await?,
+					None => event_data.into()
+				}),
+				("new_member", event_data.into())
+			], None);
+			document
+				.process(variables)
+				.await?
+				.send_logs(guild_id)
+				.await?;
 		}
 	}
 

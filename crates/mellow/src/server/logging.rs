@@ -172,6 +172,8 @@ impl Server {
 											format!("* Encountered an error at **{}**\n```diff\n- {}\n--- {}```\n", element_kind.display_name(), source.kind, source.context),
 										ActionTrackerItem::AssignedMemberRole(user_id, role_id) =>
 											format!("* Assigned <@&{role_id}> to <@{user_id}>"),
+										ActionTrackerItem::RemovedMemberRole(user_id, role_id) =>
+											format!("* Removed <@&{role_id}> from <@{user_id}>"),
 										ActionTrackerItem::BannedMember(user_id) =>
 											format!("* Banned <@{user_id}> from the server"),
 										ActionTrackerItem::KickedMember(user_id) =>

@@ -128,8 +128,14 @@ impl StatementStream {
 					Condition::ContainsOnly => if let Some(input_a) = input_a && let Some(input_b) = input_b {
 						input_a.contains_only(&input_b)
 					} else { false },
+					Condition::ContainsOneOf => if let Some(input_a) = input_a && let Some(input_b) = input_b {
+						input_a.contains_one_of(&input_b)
+					} else { false },
 					Condition::DoesNotContain => if let Some(input_a) = input_a && let Some(input_b) = input_b {
 						!input_a.contains(&input_b)
+					} else { false },
+					Condition::DoesNotContainOneOf => if let Some(input_a) = input_a && let Some(input_b) = input_b {
+						!input_a.contains_one_of(&input_b)
 					} else { false },
 					Condition::BeginsWith => if let Some(input_a) = input_a && let Some(input_b) = input_b {
 						input_a.starts_with(&input_b)

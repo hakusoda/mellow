@@ -79,6 +79,15 @@ impl Document {
 							tracker.assigned_member_role(user_id, &data.value);
 						}
 					},
+					ElementKind::RemoveRoleFromMember(data) => {
+						if let Some(member) = data.reference.resolve(&*variables.read().await) {
+							let user_id = member.get("id").cast_id();
+							CLIENT.remove_guild_member_role(member.get("guild_id").cast_id(), user_id, Id::new(data.value.parse()?))
+								.reason("Triggered by a visual scripting element")?
+								.await?;
+							tracker.removed_member_role(user_id, &data.value);
+						}
+					},
 					ElementKind::SyncMember => {
 						if let Some(member) = Some(variables.read().await.get("member")) {
 							let user_id = member.get("id").cast_id();
@@ -186,6 +195,8 @@ pub enum DocumentKind {
 	MemberJoinEvent,
 	#[serde(rename = "mellow.discord_event.message_create")]
 	MessageCreatedEvent,
+	#[serde(rename = "mellow.discord_event.member.updated")]
+	MemberUpdatedEvent,
 	#[serde(rename = "mellow.discord_event.member.completed_onboarding")]
 	MemberCompletedOnboardingEvent,
 
@@ -221,6 +232,8 @@ pub enum ElementKind {
 
 	#[serde(rename = "action.mellow.member.roles.assign")]
 	AssignRoleToMember(StringValueWithVariableReference),
+	#[serde(rename = "action.mellow.member.roles.remove")]
+	RemoveRoleFromMember(StringValueWithVariableReference),
 
 	#[serde(rename = "action.mellow.message.reply")]
 	Reply(StringValueWithVariableReference),
@@ -255,6 +268,7 @@ impl ElementKind {
 		match self {
 			ElementKind::AddReaction(_) => "Add reaction to message",
 			ElementKind::AssignRoleToMember(_) => "Assign role to member",
+			ElementKind::RemoveRoleFromMember(_) => "Remove role from member",
 			ElementKind::BanMember(_) => "Ban member from the server",
 			ElementKind::Comment => "Comment",
 			ElementKind::CreateMessage(_) => "Send message in channel",
@@ -365,8 +379,12 @@ pub enum Condition {
 	Contains,
 	#[serde(rename = "iterable.contains_only")]
 	ContainsOnly,
+	#[serde(rename = "iterable.contains_one_of")]
+	ContainsOneOf,
 	#[serde(rename = "iterable.does_not_contain")]
 	DoesNotContain,
+	#[serde(rename = "iterable.does_not_contain_one_of")]
+	DoesNotContainOneOf,
 	#[serde(rename = "iterable.begins_with")]
 	BeginsWith,
 	#[serde(rename = "iterable.ends_with")]

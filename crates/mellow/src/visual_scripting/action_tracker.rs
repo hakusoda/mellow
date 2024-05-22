@@ -43,6 +43,10 @@ impl ActionTracker {
 		self.items.push(ActionTrackerItem::AssignedMemberRole(user_id.to_string(), role_id.to_string()));
 	}
 
+	pub fn removed_member_role(&mut self, user_id: impl ToString, role_id: impl ToString) {
+		self.items.push(ActionTrackerItem::RemovedMemberRole(user_id.to_string(), role_id.to_string()));
+	}
+
 	pub fn banned_member(&mut self, user_id: impl ToString) {
 		self.items.push(ActionTrackerItem::BannedMember(user_id.to_string()));
 	}
@@ -63,6 +67,7 @@ impl ActionTracker {
 pub enum ActionTrackerItem {
 	Error(ElementKind, Error),
 	AssignedMemberRole(String, String),
+	RemovedMemberRole(String, String),
 	BannedMember(String),
 	KickedMember(String),
 	CreatedMessage(Id<ChannelMarker>, Id<MessageMarker>),
