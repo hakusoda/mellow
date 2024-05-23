@@ -130,10 +130,10 @@ async fn parse_interaction(context: Context, interaction: Interaction) -> Result
 					
 					Ok(InteractionResponse {
 						kind: InteractionResponseType::DeferredChannelMessageWithSource,
-						data: Some(InteractionResponseData {
+						data: if command.is_ephemeral { Some(InteractionResponseData {
 							flags: Some(MessageFlags::EPHEMERAL),
 							..Default::default()
-						})
+						}) } else { None }
 					})
 				} else {
 					Ok(InteractionResponse {

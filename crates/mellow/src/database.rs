@@ -22,7 +22,9 @@ pub static DATABASE: Lazy<PostgrestClient> = Lazy::new(|| {
 
 #[derive(Clone, Deserialize)]
 pub struct ServerCommand {
-	pub document: Document
+	pub document: Document,
+	#[serde(default)]
+	pub is_ephemeral: bool
 }
 
 impl ServerCommand {
@@ -34,7 +36,7 @@ impl ServerCommand {
 				Some(x) => x,
 				None => {
 					let command: Self = DATABASE.from("mellow_server_commands")
-						.select("document:visual_scripting_documents(id,name,kind,active,definition)")
+						.select("document:visual_scripting_documents ( id, name, kind, active, definition ), is_ephemeral")
 						.eq("name", &cache_key.1)
 						.eq("server_id", guild_id.to_string())
 						.limit(1)
