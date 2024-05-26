@@ -46,6 +46,7 @@ use crate::{
 		syncing::sync_with_token,
 		COMMANDS
 	},
+	visual_scripting::Document,
 	Result
 };
 
@@ -130,15 +131,16 @@ struct ModelUpdate {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(tag = "kind")]
+#[serde(tag = "kind", rename = "snake_case")]
 enum ModelUpdateKind {
+	#[serde(rename = "mellow_server")]
+	Server(Server),
 	#[serde(rename = "mellow_user_server_settings")]
 	UserServerSettings {
 		user_id: HakuId<HakuUserMarker>,
 		server_id: Id<GuildMarker>,
 		user_connections: Vec<ConnectionReference>
 	},
-	#[serde(rename = "user_connection")]
 	UserConnection {
 		user_id: HakuId<HakuUserMarker>,
 		#[serde(flatten)]
@@ -151,42 +153,13 @@ enum ModelUpdateKind {
 		#[serde(flatten)]
 		oauth_authorisation: OAuthAuthorisation
 	},
-	#[serde(rename = "mellow_server")]
-	Server(Server)
+	VisualScriptingDocument(Document)
 }
 
 #[post("/supabase_webhooks/model_update")]
 async fn model_update_webhook(_request: HttpRequest, payload: web::Json<ModelUpdate>) -> ApiResult<HttpResponse> {
 	let model_update = payload.into_inner();
 	match model_update.kind {
-		ModelUpdateKind::UserServerSettings { user_id, server_id, user_connections } => {
-			MELLOW_MODELS.member_settings.insert((server_id, user_id), UserSettings {
-				user_connections
-			});
-			println!("model::mellow::member_settings.write (guild_id={server_id}) (user_id={user_id})");
-		},
-		ModelUpdateKind::UserConnection { user_id, connection } => {
-			if let Some(mut user) = HAKUMI_MODELS.users.get_mut(&user_id) {
-				println!("model::hakumi::users::(id={user_id})::connections.write (id={})", connection.id);
-				if let Some(existing) = user.connections.iter_mut().find(|x| x.id == connection.id || (x.sub == connection.sub && x.kind == connection.kind)) {
-					*existing = connection;
-				} else {
-					user.connections.push(connection);
-				}
-			}
-		},
-		ModelUpdateKind::UserConnectionOAuthAuthorisation { user_id, connection_id, oauth_authorisation } => {
-			if let Some(mut user) = HAKUMI_MODELS.users.get_mut(&user_id) {
-				if let Some(connection) = user.connections.iter_mut().find(|x| x.id == connection_id) {
-					println!("model::hakumi::users::(id={user_id})::connections::(id={})::oauth_authorisations.write", connection.id);
-					if let Some(existing) = connection.oauth_authorisations.iter_mut().find(|x| x.id == oauth_authorisation.id) {
-						*existing = oauth_authorisation;
-					} else {
-						connection.oauth_authorisations.push(oauth_authorisation);
-					}
-				}
-			}
-		},
 		ModelUpdateKind::Server(new_server) => {
 			let id = new_server.id;
 			if let Some(old_server) = MELLOW_MODELS.servers.get(&id) {
@@ -223,6 +196,38 @@ async fn model_update_webhook(_request: HttpRequest, payload: web::Json<ModelUpd
 			}
 			MELLOW_MODELS.servers.insert(id, new_server);
 			println!("model::mellow::servers.write (guild_id={id})");
+		},
+		ModelUpdateKind::UserServerSettings { user_id, server_id, user_connections } => {
+			MELLOW_MODELS.member_settings.insert((server_id, user_id), UserSettings {
+				user_connections
+			});
+			println!("model::mellow::member_settings.write (guild_id={server_id}) (user_id={user_id})");
+		},
+		ModelUpdateKind::UserConnection { user_id, connection } => {
+			if let Some(mut user) = HAKUMI_MODELS.users.get_mut(&user_id) {
+				println!("model::hakumi::users::(id={user_id})::connections.write (id={})", connection.id);
+				if let Some(existing) = user.connections.iter_mut().find(|x| x.id == connection.id || (x.sub == connection.sub && x.kind == connection.kind)) {
+					*existing = connection;
+				} else {
+					user.connections.push(connection);
+				}
+			}
+		},
+		ModelUpdateKind::UserConnectionOAuthAuthorisation { user_id, connection_id, oauth_authorisation } => {
+			if let Some(mut user) = HAKUMI_MODELS.users.get_mut(&user_id) {
+				if let Some(connection) = user.connections.iter_mut().find(|x| x.id == connection_id) {
+					println!("model::hakumi::users::(id={user_id})::connections::(id={})::oauth_authorisations.write", connection.id);
+					if let Some(existing) = connection.oauth_authorisations.iter_mut().find(|x| x.id == oauth_authorisation.id) {
+						*existing = oauth_authorisation;
+					} else {
+						connection.oauth_authorisations.push(oauth_authorisation);
+					}
+				}
+			}
+		},
+		ModelUpdateKind::VisualScriptingDocument(document) => {
+			println!("model::hakumi::vs_documents.write (id={})", document.id);
+			HAKUMI_MODELS.vs_documents.insert(document.id, document);
 		}
 	}
 
