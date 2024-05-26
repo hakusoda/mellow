@@ -1,8 +1,11 @@
 use std::collections::HashMap;
 use serde::{ Serialize, Deserialize };
-use twilight_model::id::{
-	marker::GuildMarker,
-	Id
+use twilight_model::{
+	id::{
+		marker::GuildMarker,
+		Id
+	},
+	channel::Attachment
 };
 
 use crate::{
@@ -197,7 +200,8 @@ impl From<&twilight_model::gateway::payload::incoming::MessageCreate> for Variab
 			("id", value.id.to_string().into()),
 			("author", value.author.clone().into()),
 			("content", value.content.clone().into()),
-			("channel_id", value.channel_id.to_string().into())
+			("channel_id", value.channel_id.to_string().into()),
+			("attachments", value.attachments.clone().into())
 		], Some(VariableInterpretAs::Message))
 	}
 }
@@ -211,6 +215,15 @@ impl From<&twilight_model::gateway::payload::incoming::MemberUpdate> for Variabl
 			("username", value.user.name.clone().into()),
 			("avatar_url", value.avatar.or(value.user.avatar).map(|x| format!("https://cdn.discordapp.com/avatars/{}/{x}.webp", value.user.id)).unwrap_or("".into()).into()),
 			("display_name", value.user.global_name.clone().unwrap_or_else(|| value.user.name.clone()).into())
+		], Some(VariableInterpretAs::Member))
+	}
+}
+
+impl From<Attachment> for Variable {
+	fn from(value: Attachment) -> Self {
+		Variable::create_map([
+			("id", value.id.into()),
+			("url", value.url.into())
 		], Some(VariableInterpretAs::Member))
 	}
 }
