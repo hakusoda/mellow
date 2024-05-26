@@ -39,6 +39,10 @@ impl ActionTracker {
 		self.items.push(ActionTrackerItem::Error(element_kind, source));
 	}
 
+	pub fn created_thread(&mut self, channel_id: Id<ChannelMarker>, thread_id: Id<ChannelMarker>) {
+		self.items.push(ActionTrackerItem::CreatedThread(channel_id, thread_id));
+	}
+
 	pub fn assigned_member_role(&mut self, user_id: impl ToString, role_id: impl ToString) {
 		self.items.push(ActionTrackerItem::AssignedMemberRole(user_id.to_string(), role_id.to_string()));
 	}
@@ -71,5 +75,6 @@ pub enum ActionTrackerItem {
 	BannedMember(String),
 	KickedMember(String),
 	CreatedMessage(Id<ChannelMarker>, Id<MessageMarker>),
-	DeletedMessage(String, String)
+	DeletedMessage(String, String),
+	CreatedThread(Id<ChannelMarker>, Id<ChannelMarker>)
 }

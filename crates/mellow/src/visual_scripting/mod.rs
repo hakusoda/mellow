@@ -165,6 +165,17 @@ impl Document {
 							.content(Some(&data.resolve(variables)))?
 							.await?;
 					},
+					ElementKind::StartThreadFromMessage { name, message } => {
+						let variables = &*variables.read().await;
+						if let Some(message) = message.resolve(variables) {
+							let channel_id = message.get("channel_id").cast_id();
+							let new_thread = CLIENT.create_thread_from_message(channel_id, message.get("id").cast_id(), &name.resolve(variables))?
+								.await?
+								.model()
+								.await?;
+							tracker.created_thread(channel_id, new_thread.id);
+						}
+					},
 					_ => ()
 				}
 			};
@@ -245,6 +256,12 @@ pub enum ElementKind {
 	#[serde(rename = "action.mellow.message.delete")]
 	DeleteMessage(VariableReference),
 
+	#[serde(rename = "action.mellow.message.start_thread")]
+	StartThreadFromMessage {
+		name: Text,
+		message: VariableReference
+	},
+
 	#[serde(rename = "action.mellow.interaction.reply")]
 	InteractionReply(Text),
 
@@ -273,6 +290,7 @@ impl ElementKind {
 			ElementKind::Comment => "Comment",
 			ElementKind::CreateMessage(_) => "Send message in channel",
 			ElementKind::DeleteMessage(_) => "Delete message",
+			ElementKind::StartThreadFromMessage { .. } => "Start thread from message",
 			ElementKind::GetLinkedPatreonCampaign => "Get linked patreon campaign",
 			ElementKind::IfStatement(_) => "If",
 			ElementKind::InteractionReply(_) => "Reply to author",

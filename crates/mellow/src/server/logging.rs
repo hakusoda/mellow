@@ -181,7 +181,9 @@ impl Server {
 										ActionTrackerItem::CreatedMessage(channel_id, message_id) =>
 											format!("* Sent a message in <#{channel_id}>: https://discord.com/channels/{}/{channel_id}/{message_id}", self.id),
 										ActionTrackerItem::DeletedMessage(channel_id, user_id) =>
-											format!("* Deleted a message in <#{channel_id}> by <@{user_id}>")
+											format!("* Deleted a message in <#{channel_id}> by <@{user_id}>"),
+										ActionTrackerItem::CreatedThread(channel_id, thread_id) =>
+											format!("* Started a new thread in <#{channel_id}>: <#{thread_id}>")
 									})
 									.collect::<Vec<String>>()
 									.join("\n")

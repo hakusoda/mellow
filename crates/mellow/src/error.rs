@@ -17,6 +17,9 @@ pub enum ErrorKind {
 	#[error("Discord Validation Error: {0}")]
 	TwilightValidationError(#[from] twilight_validate::request::ValidationError),
 
+	#[error("Discord Channel Validation Error: {0}")]
+	TwilightChannelValidationError(#[from] twilight_validate::channel::ChannelValidationError),
+
 	#[error("Discord Message Validation Error: {0}")]
 	TwilightMessageValidationError(#[from] twilight_validate::message::MessageValidationError),
 
