@@ -35,7 +35,7 @@ impl Variable {
 			("guild_id", guild_id.to_string().into()),
 			("username", user.name.clone().into()),
 			("avatar_url", member.avatar.map(|x| format!("https://cdn.discordapp.com/avatars/{}/{x}.webp", user.id)).unwrap_or("".into()).into()),
-			("display_name", user.global_name.clone().unwrap_or_else(|| user.name.clone()).into())
+			("display_name", member.nick.clone().unwrap_or_else(|| user.global_name.clone().unwrap_or_else(|| user.name.clone())).into())
 		], Some(VariableInterpretAs::Member))
 	}
 
