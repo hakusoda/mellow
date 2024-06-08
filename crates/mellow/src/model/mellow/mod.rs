@@ -39,16 +39,10 @@ impl MellowModels {
 			tracing::debug!("servers.read (guild_id={guild_id})");
 			item
 		} else {
-			let new_item: Server = DATABASE.from("mellow_servers")
-				.select("id, actions:mellow_server_sync_actions( id, kind, criteria, action_data, display_name ), logging_types, default_nickname, logging_channel_id, allow_forced_syncing, oauth_authorisations:mellow_server_oauth_authorisations( id, expires_at, token_type, access_token, refresh_token )")
-				.eq("id", guild_id.to_string())
-				.limit(1)
-				.single()
-				.await?
-				.value;
+			let server = Server::get(guild_id).await?;
 			tracing::debug!("servers.write (guild_id={guild_id})");
 			
-			self.servers.insert(guild_id, new_item);
+			self.servers.insert(guild_id, server);
 			self.servers.get(&guild_id).unwrap()
 		})
 	}
@@ -61,21 +55,14 @@ impl MellowModels {
 				Some(HAKUMI_MODELS.vs_document(id).await?)
 			} else { None }
 		} else {
-			let new_item: Option<Document> = DATABASE.from("visual_scripting_documents")
-				.select("id,name,kind,active,definition")
-				.eq("kind", document_kind.to_string())
-				.eq("mellow_server_id", guild_id.to_string())
-				.limit(1)
-				.maybe_single()
-				.await?
-				.value;
+			let document = Document::get(guild_id, &document_kind).await?;
 			tracing::debug!("event_documents.write (guild_id={guild_id}) (document_kind={document_kind:?})");
 			
-			let id: Option<HakuId<DocumentMarker>> = new_item.as_ref().map(|x| x.id);
+			let id: Option<HakuId<DocumentMarker>> = document.as_ref().map(|x| x.id);
 			self.event_documents.insert((guild_id, document_kind), id);
 			
-			if let Some(new_item) = new_item && let Some(id) = id {
-				HAKUMI_MODELS.vs_documents.insert(id, new_item);
+			if let Some(document) = document && let Some(id) = id {
+				HAKUMI_MODELS.vs_documents.insert(id, document);
 				HAKUMI_MODELS.vs_documents.get(&id)
 			} else { None }
 		})

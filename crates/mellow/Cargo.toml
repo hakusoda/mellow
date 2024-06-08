@@ -19,23 +19,24 @@ hmac = "0.12.1"
 sha2 = "0.10.8"
 uuid = { version = "1.8.0", features = ["serde"] }
 moka = { version = "0.12.7", features = ["future"] }
+sqlx = { version = "0.7.4", features = ["uuid", "json", "chrono", "macros", "postgres", "tls-native-tls", "rust_decimal", "runtime-tokio"] }
 tokio = { version = "1.37.0", features = ["full"] }
-serde = { version = "1.0.200", features = ["derive"] }
+serde = { version = "1.0.203", features = ["derive"] }
 chrono = { version = "0.4.38", features = ["serde"] }
 tracing = "0.1.40"
 futures = "0.3.30"
 dashmap = { version = "5.5.3", features = ["inline"] }
 reqwest = { version = "0.12.4", features = ["json"] }
-mimalloc = "0.1.41"
-actix-web = "4.5.1"
+mimalloc = "0.1.42"
+actix-web = "4.6.0"
 once_cell = "1.19.0"
-thiserror = "1.0.59"
+thiserror = "1.0.61"
 simd-json = "0.13.10"
 postgrest = { git = "https://github.com/hakusoda/postgrest-rs.git", tag = "v0.1.1", features = ["simd-json"] }
 url-escape = "0.1.1"
 tokio-util = "0.7.11"
 serde_repr = "0.1.19"
-serde_json = "1.0.116"
+serde_json = "1.0.117"
 tracing-log = "0.2.0"
 signal-hook = "0.3.17"
 derive_more = "0.99.17"

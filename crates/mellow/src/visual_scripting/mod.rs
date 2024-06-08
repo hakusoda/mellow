@@ -5,9 +5,13 @@ use twilight_http::request::{
 	channel::reaction::RequestReactionType,
 	AuditLogReason
 };
-use twilight_model::id::Id;
+use twilight_model::id::{
+	marker::GuildMarker,
+	Id
+};
 
 use crate::{
+	state::STATE,
 	model::{
 		discord::DISCORD_MODELS,
 		hakumi::{
@@ -44,6 +48,29 @@ pub struct Document {
 }
 
 impl Document {
+	pub async fn get(guild_id: Id<GuildMarker>, document_kind: &DocumentKind) -> Result<Option<Self>> {
+		Ok(if let Some(record) = sqlx::query!(
+			"
+			SELECT id, name, kind, active, definition
+			FROM visual_scripting_documents
+			WHERE kind = $1 AND mellow_server_id = $2
+			",
+			document_kind.to_string(),
+			guild_id.get() as i64
+		)
+			.fetch_optional(&STATE.get().unwrap().pg_pool)
+			.await?
+		{
+			Some(Self {
+				id: record.id.into(),
+				name: record.name,
+				kind: serde_json::from_str(&format!("\"{}\"", record.kind))?,
+				active: record.active,
+				definition: serde_json::from_value(record.definition)?
+			})
+		} else { None })
+	}
+
 	pub async fn process(&self, variables: Variable) -> Result<ActionTracker> {
 		let mut stream = ElementStream::new(self.definition.clone(), variables);
 		let mut tracker = ActionTracker::new(self.name.clone());

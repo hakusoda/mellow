@@ -11,7 +11,7 @@ use twilight_gateway::{ Shard, Config, Intents, ShardId, CloseFrame };
 pub use context::Context;
 
 mod context;
-pub mod event_handler;
+pub mod event;
 
 pub async fn initialise() {
 	tracing::info!("initialising discord gateway");

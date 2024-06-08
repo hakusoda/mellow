@@ -12,20 +12,19 @@ use twilight_model::{
 };
 use twilight_gateway::{ Event, MessageSender };
 
-use super::event_handler;
+use super::event;
 use crate::{
 	model::discord::{
 		guild::CachedMember,
 		DISCORD_MODELS
 	},
-	interaction::handle_interaction,
 	Result
 };
 
 pub struct Context {
 	message_sender: MessageSender,
-	member_requests: DashMap<u8, oneshot::Sender<()>>,
-	member_request_index: Mutex<u8>
+	pub member_requests: DashMap<u8, oneshot::Sender<()>>,
+	pub member_request_index: Mutex<u8>
 }
 
 impl Context {
@@ -38,79 +37,32 @@ impl Context {
 	}
 
 	pub async fn handle_event(self: crate::Context, event: Event) -> Result<()> {
-		tracing::info!("handle_event kind: {:?}", event.kind());
-		match event {
-			Event::InteractionCreate(event_data) => {
-				handle_interaction(self, event_data.0).await?;
-			},
-			Event::MemberAdd(event_data) => {
-				DISCORD_MODELS.members.insert((event_data.guild_id, event_data.user.id), event_data.member.clone().into());
-				tracing::info!("model.discord.member.create (guild_id={}) (user_id={})", event_data.guild_id, event_data.user.id);
-				event_handler::member_add(&event_data).await?;
-			},
-			Event::MemberUpdate(event_data) => {
-				event_handler::member_update(&event_data).await?;
-				for mut member in DISCORD_MODELS.members.iter_mut() {
-					if event_data.guild_id == member.key().0 && event_data.user.id == member.user_id {
-						member.update(&event_data);
-						break;
-					}
-				}
-			},
-			Event::MemberRemove(event_data) => {
-				DISCORD_MODELS.members.remove(&(event_data.guild_id, event_data.user.id));
-				tracing::info!("model.discord.member.delete (guild_id={}) (user_id={})", event_data.guild_id, event_data.user.id);
-			},
-			Event::MessageCreate(event_data) => {
-				if !event_data.author.bot {
-					event_handler::message_create(&event_data).await?;
-				}
-			},
-			Event::RoleCreate(event_data) => {
-				tracing::info!("model.discord.role.create (guild_id={}) (role_id={})", event_data.guild_id, event_data.role.id);
-				DISCORD_MODELS.roles.insert((event_data.guild_id, event_data.role.id), event_data.role.into());
-			},
-			Event::RoleUpdate(event_data) => {
-				for mut role in DISCORD_MODELS.roles.iter_mut() {
-					if event_data.guild_id == role.key().0 && event_data.role.id == role.id {
-						role.update(&event_data);
-						break;
-					}
-				}
-			},
-			Event::RoleDelete(event_data) => {
-				DISCORD_MODELS.roles.remove(&(event_data.guild_id, event_data.role_id));
-				tracing::info!("model.discord.role.delete (guild_id={}) (role_id={})", event_data.guild_id, event_data.role_id);
-			},
-			Event::GuildCreate(event_data) => {
-				tracing::info!("model.discord.guild.create (guild_id={})", event_data.id);
-				DISCORD_MODELS.guilds.insert(event_data.id, event_data.0.into());
-			},
-			Event::GuildUpdate(event_data) => {
-				for mut guild in DISCORD_MODELS.guilds.iter_mut() {
-					if event_data.id == guild.id {
-						guild.update(&event_data);
-						break;
-					}
-				}
-			},
-			Event::GuildDelete(event_data) => {
-				DISCORD_MODELS.guilds.remove(&event_data.id);
-				tracing::info!("model.discord.guild.delete (guild_id={})", event_data.id);
-			},
-			Event::MemberChunk(event_data) => {
-				for member in event_data.members {
-					DISCORD_MODELS.members.insert((event_data.guild_id, member.user.id), member.into());
-				}
-				if event_data.chunk_index == event_data.chunk_count - 1 && let Some(nonce) = event_data.nonce.and_then(|x| x.parse().ok()) {
-					if let Some(value) = self.member_requests.remove(&nonce) {
-						value.1.send(()).unwrap();
-						*self.member_request_index.lock().await -= 1;
-					}
-				}
-			},
-			_ => ()
-		};
+		let event_kind = event.kind();
+		tracing::info!("handle_event {event_kind:?}");
+
+		tokio::spawn(async move {
+			tracing::debug!("event_kind {event_kind:?} >");
+
+			if let Err(error) =  match event {
+				Event::GuildCreate(x) => event::guild::guild_create(*x),
+				Event::GuildUpdate(x) => event::guild::guild_update(*x),
+				Event::GuildDelete(x) => event::guild::guild_delete(x),
+				Event::InteractionCreate(x) => event::interaction::interaction_create(self, *x).await,
+				Event::MemberAdd(x) => event::member::member_add(*x).await,
+				Event::MemberChunk(x) => event::member::member_chunk(self, x).await,
+				Event::MemberUpdate(x) => event::member::member_update(*x).await,
+				Event::MemberRemove(x) => event::member::member_remove(x).await,
+				Event::MessageCreate(x) => event::message::message_create(*x).await,
+				Event::RoleCreate(x) => event::role::role_create(x),
+				Event::RoleUpdate(x) => event::role::role_update(x),
+				Event::RoleDelete(x) => event::role::role_delete(x),
+				_ => Ok(())
+			} {
+				println!("error occurred in event handler! {error}");
+			}
+
+			tracing::debug!("event_kind {event_kind:?} <");
+		});
 		Ok(())
 	}
 

@@ -50,6 +50,9 @@ pub enum ErrorKind {
 	#[error("System Time Error: {0}")]
 	SystemTimeError(#[from] std::time::SystemTimeError),
 
+	#[error("SQLx Error: {0}")]
+	SqlxError(#[from] sqlx::Error),
+
 	#[error("Integer Parsing Error: {0}")]
 	ParseIntegerError(#[from] std::num::ParseIntError),
 

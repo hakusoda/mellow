@@ -33,6 +33,7 @@ mod cache;
 mod error;
 mod fetch;
 mod model;
+mod state;
 mod roblox;
 mod server;
 mod discord;
@@ -119,6 +120,12 @@ async fn main() -> std::io::Result<()> {
 	LogTracer::init().unwrap();
 
 	info!("starting mellow v{}", env!("CARGO_PKG_VERSION"));
+
+	state::STATE.set(state::State {
+		pg_pool: sqlx::PgPool::connect(env!("DATABASE_URL"))
+			.await
+			.unwrap()
+	}).unwrap();
 
 	let job_cancel = CancellationToken::new();
 	tokio::spawn(spawn_onboarding_job(job_cancel.clone()));

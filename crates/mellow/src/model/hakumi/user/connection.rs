@@ -50,7 +50,7 @@ pub enum ConnectionKind {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct OAuthAuthorisation {
-	pub id: usize,
+	pub id: u64,
 	pub token_type: String,
 	pub expires_at: chrono::DateTime<chrono::Utc>,
 	pub access_token: String,
