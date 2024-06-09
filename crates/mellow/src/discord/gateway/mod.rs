@@ -66,11 +66,6 @@ pub async fn initialise() {
 		};
 
 		let context = Arc::clone(&context);
-		tokio::spawn(async move {
-			match context.handle_event(event).await {
-				Ok(_) => (),
-				Err(source) => tracing::warn!(?source, "error handling event")
-			}
-		});
+		context.handle_event(event);
 	}
 }

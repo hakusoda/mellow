@@ -36,7 +36,7 @@ impl Context {
 		}
 	}
 
-	pub async fn handle_event(self: crate::Context, event: Event) -> Result<()> {
+	pub fn handle_event(self: crate::Context, event: Event) {
 		let event_kind = event.kind();
 		tracing::info!("handle_event {event_kind:?}");
 
@@ -63,7 +63,6 @@ impl Context {
 
 			tracing::debug!("event_kind {event_kind:?} <");
 		});
-		Ok(())
 	}
 
 	pub async fn members(&self, guild_id: Id<GuildMarker>, user_ids: Vec<Id<UserMarker>>) -> Result<Vec<RefMulti<'_, (Id<GuildMarker>, Id<UserMarker>), CachedMember>>> {

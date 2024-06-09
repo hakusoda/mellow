@@ -108,7 +108,7 @@ impl CommandResponse {
 	}
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread")]
 async fn main() -> std::io::Result<()> {
 	let subscriber = FmtSubscriber::builder()
         .with_max_level(Level::INFO)
