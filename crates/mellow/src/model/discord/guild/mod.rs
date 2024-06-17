@@ -1,6 +1,6 @@
 use twilight_model::{
 	id::{
-		marker::{ UserMarker, GuildMarker, ChannelMarker },
+		marker::{ UserMarker, ChannelMarker },
 		Id
 	},
 	util::ImageHash,
@@ -39,7 +39,7 @@ pub struct CachedGuild {
     //pub explicit_content_filter: ExplicitContentFilter,
     pub features: Vec<GuildFeature>,
     pub icon: Option<ImageHash>,
-    pub id: Id<GuildMarker>,
+    //pub id: Id<GuildMarker>,
     //pub joined_at: Option<Timestamp>,
     //pub large: bool,
     pub max_members: Option<u64>,
@@ -116,7 +116,7 @@ impl From<Guild> for CachedGuild {
 			//explicit_content_filter,
 			features,
 			icon,
-			id,
+			//id,
 			//joined_at,
 			//large,
 			max_members,
@@ -168,7 +168,7 @@ impl From<Guild> for CachedGuild {
 			//explicit_content_filter,
 			features,
 			icon,
-			id,
+			//id,
 			//joined_at,
 			//large,
 			max_members,

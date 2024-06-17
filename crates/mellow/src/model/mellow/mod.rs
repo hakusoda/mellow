@@ -42,8 +42,10 @@ impl MellowModels {
 			let server = Server::get(guild_id).await?;
 			tracing::debug!("servers.write (guild_id={guild_id})");
 			
-			self.servers.insert(guild_id, server);
-			self.servers.get(&guild_id).unwrap()
+			self.servers
+				.entry(guild_id)
+				.insert(server)
+				.downgrade()
 		})
 	}
 
@@ -62,8 +64,11 @@ impl MellowModels {
 			self.event_documents.insert((guild_id, document_kind), id);
 			
 			if let Some(document) = document && let Some(id) = id {
-				HAKUMI_MODELS.vs_documents.insert(id, document);
-				HAKUMI_MODELS.vs_documents.get(&id)
+				Some(HAKUMI_MODELS.vs_documents
+					.entry(id)
+					.insert(document)
+					.downgrade()
+				)
 			} else { None }
 		})
 	}
@@ -85,8 +90,10 @@ impl MellowModels {
 				.unwrap_or_default();
 			tracing::debug!("member_settings.write (guild_id={guild_id}) (user_id={user_id})");
 			
-			self.member_settings.insert(key, new_item.clone());
-			self.member_settings.get(&key).unwrap()
+			self.member_settings
+				.entry(key)
+				.insert(new_item)
+				.downgrade()
 		})
 	}
 }

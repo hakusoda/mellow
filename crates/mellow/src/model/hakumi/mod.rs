@@ -51,8 +51,10 @@ impl HakumiModels {
 
 			new_item.refresh_oauth().await?;
 			
-			self.users.insert(user_id, new_item);
-			self.users.get(&user_id).unwrap()
+			self.users
+				.entry(user_id)
+				.insert(new_item)
+				.downgrade()
 		})
 	}
 
@@ -72,9 +74,12 @@ impl HakumiModels {
 			tracing::info!("users.write (user_id={user_id})");
 			tracing::info!("users_by_discord.write (guild_id={guild_id}) (discord_id={user_id}) (user_id={user_id})");
 
-			self.users.insert(user_id, new_item);
 			self.users_by_discord.insert(key, user_id);
-			self.users.get(&user_id)
+			Some(self.users
+				.entry(user_id)
+				.insert(new_item)
+				.downgrade()
+			)
 		})
 	}
 
@@ -92,8 +97,10 @@ impl HakumiModels {
 				.value;
 			tracing::debug!("vs_documents.write (document_id={document_id})",);
 			
-			self.vs_documents.insert(document_id, new_item);
-			self.vs_documents.get(&document_id).unwrap()
+			self.vs_documents
+				.entry(document_id)
+				.insert(new_item)
+				.downgrade()
 		})
 	}
 }

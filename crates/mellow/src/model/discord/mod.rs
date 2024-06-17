@@ -46,8 +46,10 @@ impl DiscordModels {
 				self.members.insert((guild_id, member.user.id), member.clone().into());
 			}
 			self.guild_members.insert(guild_id, new_item.members.iter().map(|x| x.user.id).collect());
-			self.guilds.insert(guild_id, new_item.into());
-			self.guilds.get(&guild_id).unwrap()
+			self.guilds
+				.entry(guild_id)
+				.insert(new_item.into())
+				.downgrade()
 		})
 	}
 
@@ -59,25 +61,16 @@ impl DiscordModels {
 			let new_item = CLIENT.guild_onboarding(guild_id).await?.model().await?;
 			tracing::info!("guild_onboarding.write (guild_id={guild_id})");
 
-			self.guild_onboardings.insert(guild_id, new_item.into());
-			self.guild_onboardings.get(&guild_id).unwrap()
+			self.guild_onboardings
+				.entry(guild_id)
+				.insert(new_item.into())
+				.downgrade()
 		})
 	}
 
-	pub async fn role(&self, guild_id: Id<GuildMarker>, role_id: Id<RoleMarker>) -> Result<Ref<'_, (Id<GuildMarker>, Id<RoleMarker>), CachedRole>> {
-		let key = (guild_id, role_id);
-		Ok(if let Some(item) = self.roles.get(&key) {
-			tracing::info!("roles.read (guild_id={guild_id}) (role_id={role_id})");
-			item
-		} else {
-			let roles = CLIENT.roles(guild_id).await?.model().await?;
-			tracing::info!("roles.write (guild_id={guild_id}) (role_id={role_id})");
-
-			for item in roles {
-				self.roles.insert((guild_id, item.id), item.into());
-			}
-			self.roles.get(&key).unwrap()
-		})
+	#[allow(clippy::type_complexity)]
+	pub fn role(&self, guild_id: Id<GuildMarker>, role_id: Id<RoleMarker>) -> Option<Ref<'_, (Id<GuildMarker>, Id<RoleMarker>), CachedRole>> {
+		self.roles.get(&(guild_id, role_id))
 	}
 
 	pub async fn member(&self, guild_id: Id<GuildMarker>, user_id: Id<UserMarker>) -> Result<Ref<'_, (Id<GuildMarker>, Id<UserMarker>), CachedMember>> {
@@ -89,8 +82,10 @@ impl DiscordModels {
 			let new_item = CLIENT.guild_member(guild_id, user_id).await?.model().await?;
 			tracing::info!("members.write (guild_id={guild_id}) (user_id={user_id})");
 
-			self.members.insert(key, new_item.into());
-			self.members.get(&key).unwrap()
+			self.members
+				.entry(key)
+				.insert(new_item.into())
+				.downgrade()
 		})
 	}
 
@@ -102,8 +97,10 @@ impl DiscordModels {
 			let new_item = CLIENT.user(user_id).await?.model().await?;
 			tracing::info!("users.write (user_id={user_id})");
 
-			self.users.insert(user_id, new_item.into());
-			self.users.get(&user_id).unwrap()
+			self.users
+				.entry(user_id)
+				.insert(new_item.into())
+				.downgrade()
 		})
 	}
 }

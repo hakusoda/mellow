@@ -179,10 +179,9 @@ pub async fn get_connection_metadata(users: &Vec<&User>, server: &Server) -> Res
 	})
 }
 
-#[tracing::instrument(level = "trace")]
-async fn get_role_name(guild_id: Id<GuildMarker>, role_id: Id<RoleMarker>) -> Result<String> {
-	DISCORD_MODELS.role(guild_id, role_id).await.map(|x| x.name.clone())
-	//return Ok(items.iter().find(|x| &x.id == id).map_or("unknown role".into(), |x| x.name.clone()));
+fn get_role_name(guild_id: Id<GuildMarker>, role_id: Id<RoleMarker>) -> String {
+	DISCORD_MODELS.role(guild_id, role_id)
+		.map_or_else(|| "Unknown Role".into(), |x| x.name.clone())
 }
 
 // async_recursion required due to a cycle error caused by visual scripting
@@ -215,7 +214,7 @@ pub async fn sync_member(user: Option<&User>, member: &CachedMember, server: &Se
 							role_changes.push(RoleChange {
 								kind: RoleChangeKind::Added,
 								target_id: *role_id,
-								display_name: get_role_name(server.id, *role_id).await?
+								display_name: get_role_name(server.id, *role_id)
 							});
 						}
 					}
@@ -227,7 +226,7 @@ pub async fn sync_member(user: Option<&User>, member: &CachedMember, server: &Se
 								role_changes.push(RoleChange {
 									kind: RoleChangeKind::Removed,
 									target_id: *role_id,
-									display_name: get_role_name(server.id, *role_id).await?
+									display_name: get_role_name(server.id, *role_id)
 								});
 							}
 						}
