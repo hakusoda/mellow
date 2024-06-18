@@ -5,7 +5,6 @@ use std::{
 };
 use tokio::sync::RwLock;
 use tracing::{ Level, info };
-use mimalloc::MiMalloc;
 use tokio_util::sync::CancellationToken;
 use tracing_log::LogTracer;
 use twilight_model::{
@@ -43,9 +42,6 @@ mod commands;
 mod database;
 mod interaction;
 mod visual_scripting;
-
-#[global_allocator]
-static GLOBAL: MiMalloc = MiMalloc;
 
 pub type Context = Arc<discord::gateway::Context>;
 
