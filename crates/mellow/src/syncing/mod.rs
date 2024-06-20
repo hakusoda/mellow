@@ -238,7 +238,7 @@ pub async fn sync_member(user: Option<&User>, member: &CachedMember, server: &Se
 				// TODO: notify user via direct messages
 				member_status = MemberStatus::Banned;
 				CLIENT.create_ban(server.id, member.user_id)
-					.reason(&format!("Met criteria of {} — {}", action.display_name, reasoning.reason.as_ref().unwrap_or(&"No reason".into())))?
+					.reason(&format!("Met criteria of {} — {}", action.display_name, reasoning.reason.as_ref().unwrap_or(&"No reason".into())))
 					.await?;
 				break;
 			},
@@ -246,7 +246,7 @@ pub async fn sync_member(user: Option<&User>, member: &CachedMember, server: &Se
 				// TODO: notify user via direct messages
 				member_status = MemberStatus::Kicked;
 				CLIENT.remove_guild_member(server.id, member.user_id)
-					.reason(&format!("Met criteria of {} — {}", action.display_name, reasoning.reason.as_ref().unwrap_or(&"No reason".into())))?
+					.reason(&format!("Met criteria of {} — {}", action.display_name, reasoning.reason.as_ref().unwrap_or(&"No reason".into())))
 					.await?;
 				break;
 			},
@@ -291,7 +291,7 @@ pub async fn sync_member(user: Option<&User>, member: &CachedMember, server: &Se
 			request = request.roles(&roles);
 		}
 		if nickname_change.is_some() {
-			request = request.nick(target_nickname)?;
+			request = request.nick(target_nickname);
 		}
 		request.await?;
 	}

@@ -1,12 +1,9 @@
-use std::sync::{
-	atomic::{ Ordering, AtomicBool },
-	Arc
-};
+use std::sync::Arc;
 use twilight_model::gateway::{
 	payload::outgoing::update_presence::UpdatePresencePayload,
 	presence::{ Status, Activity, ActivityType }
 };
-use twilight_gateway::{ Shard, Config, Intents, ShardId, CloseFrame };
+use twilight_gateway::{ Shard, Intents, ShardId, StreamExt, ConfigBuilder, EventTypeFlags };
 
 pub use context::Context;
 
@@ -16,7 +13,7 @@ pub mod event;
 pub async fn initialise() {
 	tracing::info!("initialising discord gateway");
 
-	let config = Config::builder(
+	let config = ConfigBuilder::new(
 		env!("DISCORD_TOKEN").to_string(),
 			Intents::GUILDS | Intents::GUILD_MEMBERS | Intents::GUILD_MESSAGES |
 			Intents::MESSAGE_CONTENT
@@ -43,29 +40,12 @@ pub async fn initialise() {
 	let mut shard = Shard::with_config(ShardId::ONE, config);
 	let context = Arc::new(Context::new(shard.sender()));
 	
-	let term = Arc::new(AtomicBool::new(false));
-    signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&term)).unwrap();
-
-	loop {
-		if term.load(Ordering::Relaxed) {
-			tracing::info!("SIGINT received, shutting down gateway...");
-			shard.close(CloseFrame::NORMAL).await.unwrap();
-			break;
-		}
-
-		let event = match shard.next_event().await {
-			Ok(event) => event,
-			Err(source) => {
-				tracing::warn!(?source, "error receiving event");
-				if source.is_fatal() {
-					break;
-				}
-
-				continue;
-			}
+	while let Some(item) = shard.next_event(EventTypeFlags::all()).await {
+		let Ok(event) = item else {
+			tracing::warn!(source = ?item.unwrap_err(), "error receiving event");
+			continue;
 		};
 
-		let context = Arc::clone(&context);
-		context.handle_event(event);
+		Arc::clone(&context).handle_event(event);
 	}
 }

@@ -81,7 +81,7 @@ impl Document {
 						if let Some(member) = reference.resolve(&*variables.read().await){
 							let user_id = member.get("id").cast_id();
 							CLIENT.create_ban(member.get("guild_id").cast_id(), user_id)
-								.reason("Triggered by a visual scripting element")?
+								.reason("Triggered by a visual scripting element")
 								.await?;
 							tracker.banned_member(user_id);
 							break;
@@ -91,7 +91,7 @@ impl Document {
 						if let Some(member) = reference.resolve(&*variables.read().await) {
 							let user_id = member.get("id").cast_id();
 							CLIENT.remove_guild_member(member.get("guild_id").cast_id(), user_id)
-								.reason("Triggered by a visual scripting element")?
+								.reason("Triggered by a visual scripting element")
 								.await?;
 							tracker.kicked_member(user_id);
 							break;
@@ -101,7 +101,7 @@ impl Document {
 						if let Some(member) = data.reference.resolve(&*variables.read().await) {
 							let user_id = member.get("id").cast_id();
 							CLIENT.add_guild_member_role(member.get("guild_id").cast_id(), user_id, Id::new(data.value.parse()?))
-								.reason("Triggered by a visual scripting element")?
+								.reason("Triggered by a visual scripting element")
 								.await?;
 							tracker.assigned_member_role(user_id, &data.value);
 						}
@@ -110,7 +110,7 @@ impl Document {
 						if let Some(member) = data.reference.resolve(&*variables.read().await) {
 							let user_id = member.get("id").cast_id();
 							CLIENT.remove_guild_member_role(member.get("guild_id").cast_id(), user_id, Id::new(data.value.parse()?))
-								.reason("Triggered by a visual scripting element")?
+								.reason("Triggered by a visual scripting element")
 								.await?;
 							tracker.removed_member_role(user_id, &data.value);
 						}
@@ -148,7 +148,7 @@ impl Document {
 						if let Some(channel_id) = data.channel_id.resolve(variables) {
 							let channel_id = channel_id.cast_id();
 							let message = CLIENT.create_message(channel_id)
-								.content(&data.content.clone().resolve(variables))?
+								.content(&data.content.clone().resolve(variables))
 								.await?
 								.model()
 								.await?;
@@ -158,7 +158,7 @@ impl Document {
 					ElementKind::Reply(data) => {
 						if let Some(message) = data.reference.resolve(&*variables.read().await) {
 							CLIENT.create_message(message.get("channel_id").cast_id())
-								.content(&data.value)?
+								.content(&data.value)
 								.reply(message.get("id").cast_id())
 								.await?;
 						}
@@ -175,7 +175,7 @@ impl Document {
 						if let Some(message) = data.resolve(&*variables.read().await) {
 							let channel_id = message.get("channel_id").cast_id();
 							CLIENT.delete_message(channel_id, message.get("id").cast_id())
-								.reason("Triggered by a visual scripting element")?
+								.reason("Triggered by a visual scripting element")
 								.await?;
 							tracker.deleted_message(channel_id, message.get("author").get("id").cast_str());
 						}
@@ -189,14 +189,14 @@ impl Document {
 						let variables = &*variables.read().await;
 						let token = variables.get("interaction_token").cast_str();
 						INTERACTION.update_response(token)
-							.content(Some(&data.resolve(variables)))?
+							.content(Some(&data.resolve(variables)))
 							.await?;
 					},
 					ElementKind::StartThreadFromMessage { name, message } => {
 						let variables = &*variables.read().await;
 						if let Some(message) = message.resolve(variables) {
 							let channel_id = message.get("channel_id").cast_id();
-							let new_thread = CLIENT.create_thread_from_message(channel_id, message.get("id").cast_id(), &name.resolve(variables))?
+							let new_thread = CLIENT.create_thread_from_message(channel_id, message.get("id").cast_id(), &name.resolve(variables))
 								.await?
 								.model()
 								.await?;

@@ -14,7 +14,7 @@ pub struct CachedMember {
 	pub communication_disabled_until: Option<Timestamp>,
 	pub deaf: Option<bool>,
 	pub flags: MemberFlags,
-	pub joined_at: Timestamp,
+	pub joined_at: Option<Timestamp>,
 	pub mute: Option<bool>,
 	pub nick: Option<String>,
 	pub pending: bool,

@@ -89,8 +89,9 @@ impl CommandResponse {
 					_ => (", not sure what exactly though!", error.to_string())
 				};
 				INTERACTION.update_response(&interaction_token)
-					.content(Some(&format!("<:niko_look_left:1227198516590411826> something unexpected happened{text}\n```diff\n- {problem}\n--- {}```", error.context))).unwrap()
-					.await.unwrap();
+					.content(Some(&format!("<:niko_look_left:1227198516590411826> something unexpected happened{text}\n```diff\n- {problem}\n--- {}```", error.context)))
+					.await
+					.unwrap();
 			}
 		});
 		Self::Defer

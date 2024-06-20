@@ -31,8 +31,8 @@ pub enum ErrorKind {
 	#[error("Image Source Url Error: {0}")]
 	TwilightImageUrlError(#[from] twilight_util::builder::embed::image_source::ImageSourceUrlError),
 
-	#[error("Gateway Send Error: {0}")]
-	TwilightSendError(#[from] twilight_gateway::error::SendError),
+	#[error("Twilight Channel Error: {0}")]
+	TwilightSendError(#[from] twilight_gateway::error::ChannelError),
 
 	#[error("User Ids Error: {0}")]
 	TwilightUserIdsError(#[from] twilight_model::gateway::payload::outgoing::request_guild_members::UserIdsError),

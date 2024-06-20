@@ -74,7 +74,7 @@ pub async fn sync_with_token(server: &Server, user: &User, member: &CachedMember
 			} else {
 				format!("\n### You're missing connections\nYou haven't given this server access to all connections yet, change that [here](https://hakumi.cafe/mellow/server/{}/user_settings)!\n", server.id)
 			}
-		} else { "".into() }, server.id)))?
+		} else { "".into() }, server.id)))
 		.await?;
 
 	let mut server_logs: Vec<ServerLog> = vec![];
@@ -210,7 +210,7 @@ pub async fn forcesyncall(context: Context, interaction: Interaction) -> Result<
 		}
 
 		INTERACTION.update_response(&interaction.token)
-			.content(Some(&format!("## Successfully synced {total_synced} profiles\n{total_changed} profile(s) in total were updated.")))?
+			.content(Some(&format!("## Successfully synced {total_synced} profiles\n{total_changed} profile(s) in total were updated.")))
 			.await?;
 
 		server.send_logs(logs).await?;

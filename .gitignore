@@ -20,3 +20,4 @@ target/
 
 .cargo/
 .DS_STORE
+.env

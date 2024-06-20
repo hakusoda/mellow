@@ -34,7 +34,7 @@ pub async fn setup(_context: Context, interaction: Interaction) -> Result<Comman
 				.await?;
 
 			INTERACTION.update_response(&interaction.token)
-				.content(Some(&format!("## Server connected\nThis server is now connected to mellow!\nConfigure it online [here](https://hakumi.cafe/mellow/server/{guild_id}).\n\n*If you haven't already, to ensure that I can do what I do best, you may need to [position](https://support.discord.com/hc/en-us/articles/214836687-Role-Management-101#:~:text=drag%20to%20re-arrange%20roles) one of my roles at the very top of your server.*")))?
+				.content(Some(&format!("## Server connected\nThis server is now connected to mellow!\nConfigure it online [here](https://hakumi.cafe/mellow/server/{guild_id}).\n\n*If you haven't already, to ensure that I can do what I do best, you may need to [position](https://support.discord.com/hc/en-us/articles/214836687-Role-Management-101#:~:text=drag%20to%20re-arrange%20roles) one of my roles at the very top of your server.*")))
 				.await?;
 			Ok(())
 		}))

@@ -6,13 +6,16 @@ use crate::{
 };
 
 pub fn guild_create(guild_create: GuildCreate) -> Result<()> {
-	let guild_id = guild_create.id;
-	tracing::info!("model.discord.guild.create (guild_id={guild_id})");
-
-	for role in &guild_create.roles {
-		DISCORD_MODELS.roles.insert((guild_id, role.id), role.clone().into());
+	if let GuildCreate::Available(guild) = guild_create {
+		let guild_id = guild.id;
+		tracing::info!("model.discord.guild.create (guild_id={guild_id})");
+	
+		for role in &guild.roles {
+			DISCORD_MODELS.roles.insert((guild_id, role.id), role.clone().into());
+		}
+		DISCORD_MODELS.guilds.insert(guild_id, guild.into());
 	}
-	DISCORD_MODELS.guilds.insert(guild_id, guild_create.0.into());
+	
 	Ok(())
 }
 

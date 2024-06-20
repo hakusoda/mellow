@@ -162,23 +162,25 @@ async fn model_update_webhook(_request: HttpRequest, payload: web::Json<ModelUpd
 	match model_update.kind {
 		ModelUpdateKind::Server(new_server) => {
 			let id = new_server.id;
-			if let Some(old_server) = MELLOW_MODELS.servers.get(&id) {
+			let new_logging_types = new_server.logging_types;
+			let new_logging_channel_id = new_server.logging_channel_id;
+			if let Some(old_server) = MELLOW_MODELS.servers.insert(id, new_server) {
 				let mut logging_data_changes: Vec<DataChange> = vec![];
-				if old_server.logging_types != new_server.logging_types {
-					logging_data_changes.push(DataChange::updated("Active Events", old_server.logging_types, new_server.logging_types)?);
+				if old_server.logging_types != new_logging_types {
+					logging_data_changes.push(DataChange::updated("Active Events", old_server.logging_types, new_logging_types)?);
 				}
-				if old_server.logging_channel_id != new_server.logging_channel_id {
+				if old_server.logging_channel_id != new_logging_channel_id {
 					if old_server.logging_channel_id.is_none() {
-						logging_data_changes.push(DataChange::created("Channel", new_server.logging_channel_id.unwrap())?);
-					} else if new_server.logging_channel_id.is_none() {
+						logging_data_changes.push(DataChange::created("Channel", new_logging_channel_id.unwrap())?);
+					} else if new_logging_channel_id.is_none() {
 						logging_data_changes.push(DataChange::deleted("Channel", old_server.logging_channel_id.unwrap())?);
 					} else {
-						logging_data_changes.push(DataChange::updated("Channel", old_server.logging_channel_id.unwrap(), new_server.logging_channel_id.unwrap())?);
+						logging_data_changes.push(DataChange::updated("Channel", old_server.logging_channel_id.unwrap(), new_logging_channel_id.unwrap())?);
 					}
 				}
 
 				if !logging_data_changes.is_empty() {
-					if let Err(err) = new_server.send_logs(vec![
+					if let Err(err) = old_server.send_logs(vec![
 						ServerLog::ActionLog(ActionLog {
 							kind: "mellow.server.discord_logging.updated".into(),
 							author: model_update.actionee,
@@ -194,7 +196,6 @@ async fn model_update_webhook(_request: HttpRequest, payload: web::Json<ModelUpd
 					}
 				}
 			}
-			MELLOW_MODELS.servers.insert(id, new_server);
 			println!("model::mellow::servers.write (guild_id={id})");
 		},
 		ModelUpdateKind::UserServerSettings { user_id, server_id, user_connections } => {

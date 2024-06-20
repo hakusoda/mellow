@@ -198,7 +198,7 @@ impl Server {
 			if !embeds.is_empty() {
 				for chunk in embeds.chunks(EMBED_COUNT_LIMIT) {
 					CLIENT.create_message(channel_id)
-						.embeds(chunk)?
+						.embeds(chunk)
 						.await?;
 				}
 			}

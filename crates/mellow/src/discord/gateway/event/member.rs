@@ -1,12 +1,10 @@
 use std::time::SystemTime;
 use tokio::sync::RwLock;
 use twilight_model::{
-	id::{
-		marker::{ UserMarker, GuildMarker },
+	gateway::payload::incoming::{ MemberAdd, MemberChunk, MemberRemove, MemberUpdate }, guild::VerificationLevel, id::{
+		marker::{ GuildMarker, UserMarker },
 		Id
-	},
-	guild::VerificationLevel,
-	gateway::payload::incoming::{ MemberAdd, MemberChunk, MemberUpdate, MemberRemove }
+	}
 };
 
 use crate::{
@@ -20,18 +18,20 @@ static PENDING_MEMBERS: RwLock<Vec<(Id<GuildMarker>, Id<UserMarker>)>> = RwLock:
 pub async fn member_add(member_add: MemberAdd) -> Result<()> {
 	let user_id = member_add.user.id;
 	let guild_id = member_add.guild_id;
-	DISCORD_MODELS.members.insert((guild_id, user_id), member_add.member.clone().into());
+	let new_member = DISCORD_MODELS.members
+		.entry((guild_id, user_id))
+		.insert(member_add.member.into())
+		.downgrade();
 	tracing::info!("model.discord.member.create (guild_id={guild_id}) (user_id={user_id})");
 
-	if member_add.member.pending {
+	if new_member.pending {
 		PENDING_MEMBERS.write().await.push((guild_id, user_id));
 	}
 
 	if let Some(document) = MELLOW_MODELS.event_document(guild_id, DocumentKind::MemberJoinEvent).await? {
 		if document.is_ready_for_stream() {
-			let member = DISCORD_MODELS.member(guild_id, user_id).await?;
 			let variables = Variable::create_map([
-				("member", Variable::from_member(member.value(), guild_id).await?)
+				("member", Variable::from_member(new_member.value(), guild_id).await?)
 			], None);
 			document
 				.process(variables)
