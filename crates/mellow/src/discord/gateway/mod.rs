@@ -46,6 +46,6 @@ pub async fn initialise() {
 			continue;
 		};
 
-		Arc::clone(&context).handle_event(event);
+		event::handle_event(&context, event);
 	}
 }

@@ -10,9 +10,8 @@ use twilight_model::{
 	},
 	gateway::payload::outgoing::RequestGuildMembers
 };
-use twilight_gateway::{ Event, MessageSender };
+use twilight_gateway::MessageSender;
 
-use super::event;
 use crate::{
 	model::discord::{
 		guild::CachedMember,
@@ -34,35 +33,6 @@ impl Context {
 			member_requests: DashMap::new(),
 			member_request_index: Mutex::new(0)
 		}
-	}
-
-	pub fn handle_event(self: crate::Context, event: Event) {
-		let event_kind = event.kind();
-		tracing::info!("handle_event {event_kind:?}");
-
-		tokio::spawn(async move {
-			tracing::debug!("event_kind {event_kind:?} >");
-
-			if let Err(error) =  match event {
-				Event::GuildCreate(x) => event::guild::guild_create(*x),
-				Event::GuildUpdate(x) => event::guild::guild_update(*x),
-				Event::GuildDelete(x) => event::guild::guild_delete(x),
-				Event::InteractionCreate(x) => event::interaction::interaction_create(self, *x).await,
-				Event::MemberAdd(x) => event::member::member_add(*x).await,
-				Event::MemberChunk(x) => event::member::member_chunk(self, x).await,
-				Event::MemberUpdate(x) => event::member::member_update(*x).await,
-				Event::MemberRemove(x) => event::member::member_remove(x).await,
-				Event::MessageCreate(x) => event::message::message_create(*x).await,
-				Event::RoleCreate(x) => event::role::role_create(x),
-				Event::RoleUpdate(x) => event::role::role_update(x),
-				Event::RoleDelete(x) => event::role::role_delete(x),
-				_ => Ok(())
-			} {
-				println!("error occurred in event handler! {error}");
-			}
-
-			tracing::debug!("event_kind {event_kind:?} <");
-		});
 	}
 
 	pub async fn members(&self, guild_id: Id<GuildMarker>, user_ids: Vec<Id<UserMarker>>) -> Result<Vec<RefMulti<'_, (Id<GuildMarker>, Id<UserMarker>), CachedMember>>> {
