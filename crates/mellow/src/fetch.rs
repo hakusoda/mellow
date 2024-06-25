@@ -6,7 +6,7 @@ use reqwest::{
 	Client, Method, IntoUrl
 };
 use once_cell::sync::Lazy;
-use crate::Result;
+use crate::{ Error, Result };
 
 pub static CLIENT: Lazy<Client> = Lazy::new(||
 	Client::builder()
@@ -39,7 +39,7 @@ pub async fn fetch_json<U: IntoUrl + Debug, T: DeserializeOwned>(url: U, method:
 				simd_json::from_slice(&mut x.bytes().await?.to_vec())?
 			})
 		},
-		Err(error) => Err(crate::error::ErrorKind::FormattedHttpError(url.to_string(), error.to_string()).into())
+		Err(error) => Err(Error::Fetch(url.to_string(), error.to_string()))
 	}
 }
 

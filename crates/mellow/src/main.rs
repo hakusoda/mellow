@@ -17,7 +17,7 @@ use twilight_model::{
 };
 use tracing_subscriber::FmtSubscriber;
 
-use error::ErrorKind;
+use error::Error;
 use model::{
 	discord::DISCORD_MODELS,
 	mellow::MELLOW_MODELS
@@ -84,12 +84,12 @@ impl CommandResponse {
 		tokio::spawn(async move {
 			if let Err(error) = callback.await {
 				tracing::error!("error during interaction: {}", error);
-				let (text, problem) = match &error.kind {
-					ErrorKind::TwilightHttpError(error) => (" while communicating with discord...", error.to_string()),
+				let (text, problem) = match &error {
+					Error::TwilightHttp(error) => (" while communicating with discord...", error.to_string()),
 					_ => (", not sure what exactly though!", error.to_string())
 				};
 				INTERACTION.update_response(&interaction_token)
-					.content(Some(&format!("<:niko_look_left:1227198516590411826> something unexpected happened{text}\n```diff\n- {problem}\n--- {}```", error.context)))
+					.content(Some(&format!("<:niko_look_left:1227198516590411826> something unexpected happened{text}\n```diff\n- {problem}```")))
 					.await
 					.unwrap();
 			}
@@ -115,6 +115,19 @@ async fn main() -> std::io::Result<()> {
         .expect("setting default subscriber failed");
 
 	LogTracer::init().unwrap();
+
+	std::thread::spawn(move || loop {
+        std::thread::sleep(std::time::Duration::from_secs(2));
+        for deadlock in parking_lot::deadlock::check_deadlock() {
+            for deadlock in deadlock {
+                println!(
+                    "Found a deadlock! {}:\n{:?}",
+                    deadlock.thread_id(),
+                    deadlock.backtrace()
+                );
+            }
+        }
+    });
 
 	info!("starting mellow v{}", env!("CARGO_PKG_VERSION"));
 
@@ -155,6 +168,7 @@ async fn spawn_onboarding_job(stop_signal: CancellationToken) {
 									("member", Variable::from_member(member.value(), guild_id).await.unwrap())
 								], None);
 								document
+									.clone()
 									.process(variables)
 									.await.unwrap()
 									.send_logs(guild_id)

@@ -28,17 +28,16 @@ pub static HAKUMI_MODELS: Lazy<HakumiModels> = Lazy::new(HakumiModels::default);
 pub struct HakumiModels {
 	pub users: DashMap<HakuId<HakuUserMarker>, User>,
 	//user_connections: DashMap<(HakuId<HakuUserMarker>, HakuId<ConnectionMarker>), Connection>,
-	users_by_discord: DashMap<(Id<GuildMarker>, Id<UserMarker>), HakuId<HakuUserMarker>>,
+	pub users_by_discord: DashMap<(Id<GuildMarker>, Id<UserMarker>), HakuId<HakuUserMarker>>,
 
 	pub vs_documents: DashMap<HakuId<DocumentMarker>, Document>
 }
 
 impl HakumiModels {
 	pub async fn user(&self, user_id: HakuId<HakuUserMarker>) -> Result<Ref<'_, HakuId<HakuUserMarker>, User>> {
-		Ok(if let Some(mut item) = self.users.get_mut(&user_id) {
+		Ok(if let Some(item) = self.users.get(&user_id) {
 			tracing::info!("users.read (user_id={user_id})");
-			item.refresh_oauth().await?;
-			item.downgrade()
+			item
 		} else {
 			let mut new_item: User = DATABASE.from("users")
 				.select("id, server_settings:mellow_user_server_settings(user_connections), connections:user_connections( id, sub, type, username, display_name, oauth_authorisations:user_connection_oauth_authorisations( id, token_type, expires_at, access_token, refresh_token ) )")
@@ -58,11 +57,11 @@ impl HakumiModels {
 		})
 	}
 
-	pub async fn user_by_discord(&self, guild_id: Id<GuildMarker>, user_id: Id<UserMarker>) -> Result<Option<Ref<'_, HakuId<HakuUserMarker>, User>>> {
+	pub async fn user_by_discord(&self, guild_id: Id<GuildMarker>, user_id: Id<UserMarker>) -> Result<Option<Ref<'_, (Id<GuildMarker>, Id<UserMarker>), HakuId<HakuUserMarker>>>> {
 		let key = (guild_id, user_id);
 		Ok(if let Some(item) = self.users_by_discord.get(&key) {
 			tracing::info!("users_by_discord.read (guild_id={guild_id}) (discord_id={user_id})");
-			Some(self.user(*item.value()).await?)
+			Some(item)
 		} else {
 			let mut new_item = match get_user_reference(user_id).await? {
 				Some(x) => x,
@@ -74,10 +73,10 @@ impl HakumiModels {
 			tracing::info!("users.write (user_id={user_id})");
 			tracing::info!("users_by_discord.write (guild_id={guild_id}) (discord_id={user_id}) (user_id={user_id})");
 
-			self.users_by_discord.insert(key, user_id);
-			Some(self.users
-				.entry(user_id)
-				.insert(new_item)
+			self.users.insert(user_id, new_item);
+			Some(self.users_by_discord
+				.entry(key)
+				.insert(user_id)
 				.downgrade()
 			)
 		})

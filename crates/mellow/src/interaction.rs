@@ -121,6 +121,7 @@ async fn parse_interaction(context: Context, interaction: Interaction) -> Result
 							("interaction_token", token.into())
 						], None);
 						command.document
+							.clone()
 							.process(variables)
 							.await?
 							.send_logs(guild_id)

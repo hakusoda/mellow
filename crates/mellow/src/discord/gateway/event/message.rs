@@ -16,6 +16,7 @@ pub async fn message_create(message_create: MessageCreate) -> Result<()> {
 						("message", (&message_create).into())
 					], None);
 					document
+						.clone()
 						.process(variables)
 						.await?
 						.send_logs(guild_id)

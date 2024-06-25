@@ -13,7 +13,6 @@ use twilight_model::id::{
 use crate::{
 	state::STATE,
 	model::{
-		discord::DISCORD_MODELS,
 		hakumi::{
 			id::{
 				marker::DocumentMarker,
@@ -119,12 +118,12 @@ impl Document {
 						if let Some(member) = Some(variables.read().await.get("member")) {
 							let user_id = member.get("id").cast_id();
 							let guild_id = member.get("guild_id").cast_id();
-							if let Some(user) = HAKUMI_MODELS.user_by_discord(guild_id, user_id).await? {
-								let server = MELLOW_MODELS.server(guild_id).await?;
-								let member = DISCORD_MODELS.member(guild_id, user_id).await?;
-								let result = sync_single_user(server.value(), user.value(), member.value(), None).await?;
+							if let Some(haku_id) = HAKUMI_MODELS.users_by_discord.get(&(guild_id, user_id)) {
+								let result = sync_single_user(guild_id, *haku_id, user_id, None)
+									.await?;
 								if result.profile_changed || result.member_status.removed() {
-									MELLOW_MODELS.server(result.server_id)
+									MELLOW_MODELS
+										.server(guild_id)
 										.await?
 										.send_logs(vec![ServerLog::ServerProfileSync {
 											kind: match result.member_status {
@@ -132,7 +131,7 @@ impl Document {
 												MemberStatus::Banned => ProfileSyncKind::Banned,
 												MemberStatus::Kicked => ProfileSyncKind::Kicked
 											},
-											user_id: member.user_id,
+											user_id,
 											forced_by: None,
 											role_changes: result.role_changes.clone(),
 											nickname_change: result.nickname_change.clone(),

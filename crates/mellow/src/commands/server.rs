@@ -19,17 +19,17 @@ pub async fn setup(_context: Context, interaction: Interaction) -> Result<Comman
 		CommandResponse::ephemeral(
 			format!("## Server already connected\nThis server is already connected to mellow, view it [here](https://hakumi.cafe/mellow/server/{guild_id}).")
 		)
-	} else if let Some(user) = HAKUMI_MODELS.user_by_discord(guild_id, interaction.user_id.unwrap()).await? {
+	} else if let Some(user_id) = HAKUMI_MODELS.user_by_discord(guild_id, interaction.user_id.unwrap()).await? {
 		CommandResponse::defer(interaction.token.clone(), Box::pin(async move {
 			let guild = DISCORD_MODELS.guild(guild_id).await?;
 			DATABASE.from("mellow_servers")
 				.insert(json!({
 					"id": guild_id,
 					"name": guild.name,
-					"creator_id": user.id,
+					"creator_id": *user_id,
 					"avatar_url": guild.icon.map(|x| format!("https://cdn.discordapp.com/icons/{guild_id}/{x}.webp")),
 					"banner_url": guild.splash.map(|x| format!("https://cdn.discordapp.com/splashes/{guild_id}/{x}.webp?size=1032")),
-					"owner_user_id": user.id
+					"owner_user_id": *user_id
 				}))?
 				.await?;
 

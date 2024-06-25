@@ -169,7 +169,7 @@ impl Server {
 									.into_iter()
 									.map(|x| match x {
 										ActionTrackerItem::Error(element_kind, source) =>
-											format!("* Encountered an error at **{}**\n```diff\n- {}\n--- {}```\n", element_kind.display_name(), source.kind, source.context),
+											format!("* Encountered an error at **{}**\n```diff\n- {}```\n", element_kind.display_name(), source),
 										ActionTrackerItem::AssignedMemberRole(user_id, role_id) =>
 											format!("* Assigned <@&{role_id}> to <@{user_id}>"),
 										ActionTrackerItem::RemovedMemberRole(user_id, role_id) =>

@@ -1,47 +1,39 @@
-use std::collections::HashMap;
-use uuid::Uuid;
+use async_recursion::async_recursion;
 use serde::{ Serialize, Deserialize };
+use std::collections::HashMap;
 use twilight_http::request::AuditLogReason;
 use twilight_model::id::{
-	marker::{ RoleMarker, GuildMarker },
+	marker::{ GuildMarker, RoleMarker, UserMarker },
 	Id
 };
-use async_recursion::async_recursion;
+use uuid::Uuid;
 
 use crate::{
+	discord::CLIENT,
 	model::{
-		discord::{
-			guild::CachedMember,
-			DISCORD_MODELS
-		},
+		discord::DISCORD_MODELS,
 		hakumi::{
 			id::{
-				marker::{ ConnectionMarker, SyncActionMarker },
+				marker::{ UserMarker as HakuUserMarker, ConnectionMarker, SyncActionMarker },
 				HakuId
 			},
-			user::{
-				connection::{
-					Connection,
-					ConnectionKind
-				},
-				User
-			}
+			user::connection::{
+				Connection,
+				ConnectionKind
+			},
+			HAKUMI_MODELS
 		},
 		mellow::{
-			server::{
-				sync_action::{
-					SyncAction,
-					SyncActionKind,
-					CriteriaItem
-				},
-				Server
+			server::sync_action::{
+				CriteriaItem,
+				SyncAction,
+				SyncActionKind
 			},
 			MELLOW_MODELS
 		}
 	},
-	roblox::get_user_group_roles,
 	patreon::UserIdentityField,
-	discord::CLIENT,
+	roblox::get_user_group_roles,
 	visual_scripting::{ Variable, DocumentKind },
 	Result
 };
@@ -114,23 +106,29 @@ impl MemberStatus {
 	}
 }
 
-pub async fn get_connection_metadata(users: &Vec<&User>, server: &Server) -> Result<ConnectionMetadata> {
+pub async fn get_connection_metadata(guild_id: Id<GuildMarker>, user_ids: &Vec<HakuId<HakuUserMarker>>) -> Result<ConnectionMetadata> {
 	let mut patreon_pledges: Vec<PatreonPledge> = vec![];
 	let mut roblox_memberships: Vec<RobloxMembership> = vec![];
 	let mut group_ids: Vec<u64> = vec![];
-	for action in &server.actions {
-		for criteria_item in &action.criteria.items {
+
+	let actions = MELLOW_MODELS
+		.server(guild_id)
+		.await?
+		.actions
+		.clone();
+	for action in actions {
+		for criteria_item in action.criteria.items {
 			match criteria_item {
 				CriteriaItem::RobloxGroupMembership { group_id } |
 				CriteriaItem::RobloxGroupMembershipRole { group_id, .. } |
 				CriteriaItem::RobloxGroupMembershipRoleRankInRange { group_id, .. } => {
-					if !group_ids.contains(group_id) {
-						group_ids.push(*group_id);
+					if !group_ids.contains(&group_id) {
+						group_ids.push(group_id);
 					}
 				},
 				CriteriaItem::PatreonCampaignTierSubscription { .. } => {
-					for user in users {
-						if let Some(connection) = user.server_connections(server.id).await?.into_iter().find(|x| matches!(x.kind, ConnectionKind::Patreon)) {
+					for user_id in user_ids {
+						if let Some(connection) = HAKUMI_MODELS.user(*user_id).await?.server_connections(guild_id).await?.into_iter().find(|x| matches!(x.kind, ConnectionKind::Patreon)) {
 							let data = crate::patreon::get_user_memberships(&connection.oauth_authorisations[0]).await?;
 							if let Some(included) = data.included {
 								for membership in included {
@@ -138,7 +136,7 @@ pub async fn get_connection_metadata(users: &Vec<&User>, server: &Server) -> Res
 										patreon_pledges.push(PatreonPledge {
 											tiers: member.relationships.currently_entitled_tiers.data.0.iter().map(|x| x.id.clone()).collect(),
 											active: member.attributes.patron_status.is_some_and(|x| x == "active_patron"),
-											user_id: user.id.value,
+											user_id: user_id.value,
 											campaign_id: member.relationships.campaign.data.id,
 											connection_id: connection.id
 										});
@@ -157,8 +155,17 @@ pub async fn get_connection_metadata(users: &Vec<&User>, server: &Server) -> Res
 		//let roblox_ids: Vec<String> = users.iter().flat_map(|x| x.user.connections.iter().filter(|x| matches!(x.connection.kind, ConnectionKind::Roblox)).map(|x| format!("users/{}", x.connection.sub)).collect::<Vec<String>>()).collect();
 		//let items = get_group_memberships("-", Some(format!("user in ['{}']", roblox_ids.join("','")))).await;
 		let mut ids: Vec<String> = vec![];
-		for user in users.iter() {
-			ids.extend(user.server_connections(server.id).await?.into_iter().filter(|x| matches!(x.kind, ConnectionKind::Roblox)).map(|x| x.sub.clone()));
+		for user_id in user_ids {
+			ids.extend(
+				HAKUMI_MODELS
+				.user(*user_id)
+				.await?
+				.server_connections(guild_id)
+				.await?
+				.into_iter()
+				.filter(|x| matches!(x.kind, ConnectionKind::Roblox))
+				.map(|x| x.sub.clone())
+			);
 		}
 		for id in ids {
 			let roles = get_user_group_roles(&id).await?;
@@ -187,57 +194,69 @@ fn get_role_name(guild_id: Id<GuildMarker>, role_id: Id<RoleMarker>) -> String {
 // async_recursion required due to a cycle error caused by visual scripting
 #[async_recursion]
 #[tracing::instrument(level = "trace")]
-pub async fn sync_single_user(server: &Server, user: &User, member: &CachedMember, connection_metadata: Option<ConnectionMetadata>) -> Result<SyncMemberResult> {
+pub async fn sync_single_user(guild_id: Id<GuildMarker>, user_id: HakuId<HakuUserMarker>, member_id: Id<UserMarker>, connection_metadata: Option<ConnectionMetadata>) -> Result<SyncMemberResult> {
 	let metadata = match connection_metadata {
 		Some(x) => x,
-		None => get_connection_metadata(&vec![user], server).await?
+		None => get_connection_metadata(guild_id, &vec![user_id]).await?
 	};
-	sync_member(Some(user), member, server, &metadata).await
+	sync_member(guild_id, Some(user_id), member_id, &metadata).await
 }
 
 #[tracing::instrument(level = "trace")]
-pub async fn sync_member(user: Option<&User>, member: &CachedMember, server: &Server, connection_metadata: &ConnectionMetadata) -> Result<SyncMemberResult> {
-	let mut roles = member.roles.clone();
+pub async fn sync_member(guild_id: Id<GuildMarker>, user_id: Option<HakuId<HakuUserMarker>>, member_id: Id<UserMarker>, connection_metadata: &ConnectionMetadata) -> Result<SyncMemberResult> {
+	let roles = DISCORD_MODELS
+		.member(guild_id, member_id)
+		.await?
+		.roles
+		.clone();
+	
+	let mut new_roles = roles.clone();
 	let mut role_changes: Vec<RoleChange> = vec![];
 	let mut member_status = MemberStatus::Ok;
 	let mut criteria_cache: HashMap<(HakuId<SyncActionMarker>, usize), bool> = HashMap::new();
 	let mut used_connections: Vec<Connection> = vec![];
 
-	for action in server.actions.iter() {
-		let met = member_meets_action_criteria(user, action, server.id, &server.actions, connection_metadata, &mut criteria_cache, &mut used_connections).await;
+	let server = MELLOW_MODELS
+		.server(guild_id)
+		.await?;
+	let actions = server.actions.clone();
+	let default_nickname = server.default_nickname.clone();
+	for action in actions.iter() {
+		let met = member_meets_action_criteria(guild_id, user_id, action, &actions, connection_metadata, &mut criteria_cache, &mut used_connections)
+			.await?;
 		match &action.kind {
 			SyncActionKind::AssignRoles { role_ids, can_remove } => {
 				if met {
-					if !role_ids.iter().all(|x| member.roles.iter().any(|e| e == x)) {
-						for role_id in role_ids.iter().filter(|x| !member.roles.iter().any(|e| &e == x)) {
-							roles.push(*role_id);
+					if !role_ids.iter().all(|x| new_roles.iter().any(|e| e == x)) {
+						for role_id in role_ids.iter().filter(|x| !roles.iter().any(|e| &e == x)) {
+							new_roles.push(*role_id);
 							role_changes.push(RoleChange {
 								kind: RoleChangeKind::Added,
 								target_id: *role_id,
-								display_name: get_role_name(server.id, *role_id)
+								display_name: get_role_name(guild_id, *role_id)
 							});
 						}
 					}
 				} else if *can_remove {
-					let filtered: Vec<Id<RoleMarker>> = roles.clone().into_iter().filter(|x| !role_ids.contains(x)).collect();
-					if !roles.iter().all(|x| filtered.contains(x)) {
+					let filtered: Vec<Id<RoleMarker>> = new_roles.iter().filter(|x| !role_ids.contains(x)).cloned().collect();
+					if !new_roles.iter().all(|x| filtered.contains(x)) {
 						for role_id in role_ids {
-							if roles.contains(role_id) {
+							if new_roles.contains(role_id) {
 								role_changes.push(RoleChange {
 									kind: RoleChangeKind::Removed,
 									target_id: *role_id,
-									display_name: get_role_name(server.id, *role_id)
+									display_name: get_role_name(guild_id, *role_id)
 								});
 							}
 						}
-						roles = filtered;
+						new_roles = filtered;
 					}
 				}
 			},
 			SyncActionKind::BanMember(reasoning) => if met {
 				// TODO: notify user via direct messages
 				member_status = MemberStatus::Banned;
-				CLIENT.create_ban(server.id, member.user_id)
+				CLIENT.create_ban(guild_id, member_id)
 					.reason(&format!("Met criteria of {} — {}", action.display_name, reasoning.reason.as_ref().unwrap_or(&"No reason".into())))
 					.await?;
 				break;
@@ -245,13 +264,13 @@ pub async fn sync_member(user: Option<&User>, member: &CachedMember, server: &Se
 			SyncActionKind::KickMember(reasoning) => if met {
 				// TODO: notify user via direct messages
 				member_status = MemberStatus::Kicked;
-				CLIENT.remove_guild_member(server.id, member.user_id)
+				CLIENT.remove_guild_member(guild_id, member_id)
 					.reason(&format!("Met criteria of {} — {}", action.display_name, reasoning.reason.as_ref().unwrap_or(&"No reason".into())))
 					.await?;
 				break;
 			},
 			SyncActionKind::ControlFlowCancel(_reasoning) => return Ok(SyncMemberResult {
-				server_id: server.id,
+				server_id: guild_id,
 				role_changes: vec![],
 				member_status,
 				profile_changed: false,
@@ -263,48 +282,56 @@ pub async fn sync_member(user: Option<&User>, member: &CachedMember, server: &Se
 		};
 	}
 
-	let target_nickname = match &server.default_nickname {
-		Some(t) => if let Some(user) = user {
+	let target_nickname = match default_nickname {
+		Some(t) => if let Some(user_id) = user_id {
+			let user = HAKUMI_MODELS.user(user_id)
+				.await?;
+			let connections = user.server_connections(guild_id)
+				.await?;
 			match t.as_str() {
 				"{roblox_username}" =>
-					user.server_connections(server.id).await?.into_iter().find(|x| matches!(x.kind, ConnectionKind::Roblox)).and_then(|x| x.username.as_ref()),
+					connections.into_iter().find(|x| matches!(x.kind, ConnectionKind::Roblox)).and_then(|x| x.username.clone()),
 				"{roblox_display_name}" =>
-					user.server_connections(server.id).await?.into_iter().find(|x| matches!(x.kind, ConnectionKind::Roblox)).and_then(|x| x.display_name.as_ref()),
+					connections.into_iter().find(|x| matches!(x.kind, ConnectionKind::Roblox)).and_then(|x| x.display_name.clone()),
 				_ => None
-			}.map(|x| x.as_str())
+			}
 		} else { None },
 		None => None
 	};
 
-	let guild = DISCORD_MODELS.guild(server.id).await?;
+	let guild = DISCORD_MODELS.guild(guild_id).await?;
 	let nickname_change = if let Some(target) = &target_nickname {
-		if member.user_id != guild.owner_id && (member.nick.is_none() || member.nick.clone().is_some_and(|x| x != *target)) {
+		let member = DISCORD_MODELS
+			.member(guild_id, member_id)
+			.await?;
+		if member_id != guild.owner_id && (member.nick.is_none() || member.nick.clone().is_some_and(|x| x != *target)) {
 			Some(NicknameChange(member.nick.clone(), Some(target.to_string())))
 		} else { None }
 	} else { None };
 
 	let profile_changed = !member_status.removed() && !role_changes.is_empty() || nickname_change.is_some();
 	if profile_changed {
-		// there appears to be a strange issue where this rarely results in the entire gateway thread hanging, although i'm not entirely sure this is the actual source...
-		let mut request = CLIENT.update_guild_member(server.id, member.user_id);
+		let mut request = CLIENT.update_guild_member(guild_id, member_id);
 		if !role_changes.is_empty() {
-			request = request.roles(&roles);
+			request = request.roles(&new_roles);
 		}
 		if nickname_change.is_some() {
-			request = request.nick(target_nickname);
+			request = request.nick(target_nickname.as_deref());
 		}
 		request.await?;
 	}
 
 	// TODO: better.
-	let member = member.clone();
-	let guild_id = server.id;
 	let role_changes2 = role_changes.clone();
 	tokio::spawn(async move {
 		if let Some(document) = MELLOW_MODELS.event_document(guild_id, DocumentKind::MemberSynced).await.unwrap() {
 			if document.is_ready_for_stream() {
+				let member = DISCORD_MODELS
+					.member(guild_id, member_id)
+					.await
+					.unwrap();
 				let variables = Variable::create_map([
-					("member", Variable::from_member(&member, guild_id).await.unwrap()),
+					("member", Variable::from_member(member.value(), guild_id).await.unwrap()),
 					("guild_id", guild_id.to_string().into()),
 					("profile_changes", Variable::create_map([
 						("roles", Variable::create_map([
@@ -314,6 +341,7 @@ pub async fn sync_member(user: Option<&User>, member: &CachedMember, server: &Se
 					], None))
 				], None);
 				document
+					.clone()
 					.process(variables)
 					.await.unwrap()
 					.send_logs(guild_id)
@@ -322,12 +350,17 @@ pub async fn sync_member(user: Option<&User>, member: &CachedMember, server: &Se
 		}
 	});
 
-	let is_missing_connections = if let Some(user) = user {
-		let connections = user.server_connections(guild_id).await?;
-		!server.actions.iter().all(|x| x.criteria.items.iter().all(|e| e.relevant_connection().map_or(true, |x| connections.iter().any(|e| x == e.kind))))
+	let is_missing_connections = if let Some(user_id) = user_id {
+		let user = HAKUMI_MODELS
+			.user(user_id)
+			.await?;
+		let connections = user
+			.server_connections(guild_id)
+			.await?;
+		!actions.iter().all(|x| x.criteria.items.iter().all(|e| e.relevant_connection().map_or(true, |x| connections.iter().any(|e| x == e.kind))))
 	} else { false };
 	Ok(SyncMemberResult {
-		server_id: server.id,
+		server_id: guild_id,
 		role_changes,
 		member_status,
 		profile_changed,
@@ -340,41 +373,51 @@ pub async fn sync_member(user: Option<&User>, member: &CachedMember, server: &Se
 // this needs to move away from recursion
 #[async_recursion]
 pub async fn member_meets_action_criteria(
-	user: Option<&'async_recursion User>,
-	action: &SyncAction,
 	guild_id: Id<GuildMarker>,
+	user_id: Option<HakuId<HakuUserMarker>>,
+	action: &SyncAction,
 	all_actions: &Vec<SyncAction>,
 	connection_metadata: &ConnectionMetadata,
 	criteria_cache: &mut HashMap<(HakuId<SyncActionMarker>, usize), bool>,
 	used_connections: &mut Vec<Connection>
-) -> bool {
+) -> Result<bool> {
 	let criteria = &action.criteria;
 	let mut total_met = 0;
 	let minimum_amount = criteria.quantifier.minimum();
 	for (key, item) in criteria.items.iter().enumerate() {
 		let cache_key = (action.id, key);
 		if criteria_cache.get(&cache_key).is_some_and(|x| *x) || match item {
-			CriteriaItem::HakumiUserConnection { connection_kind } => matches!(user, Some(user) if
-				user.server_connections(guild_id).await.unwrap().into_iter().any(|x| &x.kind == connection_kind)
+			CriteriaItem::HakumiUserConnection { connection_kind } => matches!(user_id, Some(user_id) if
+				HAKUMI_MODELS
+					.user(user_id)
+					.await?
+					.server_connections(guild_id)
+					.await?
+					.into_iter()
+					.any(|x| &x.kind == connection_kind)
 			),
-			CriteriaItem::PatreonCampaignTierSubscription { tier_id, campaign_id } => {
-				if let Some(user) = user {
-					if let Some(pledge) = connection_metadata.patreon_pledges.iter().find(|x| x.active && x.user_id == user.id.value && x.campaign_id == *campaign_id && x.tiers.contains(tier_id)) {
-						if let Some(connection) = user.server_connections(guild_id).await.unwrap().into_iter().find(|x| x.id == pledge.connection_id) {
-							if !used_connections.contains(connection) {
-								used_connections.push(connection.clone());
-							}
+			CriteriaItem::PatreonCampaignTierSubscription { tier_id, campaign_id } => if let Some(user_id) = user_id {
+				if let Some(pledge) = connection_metadata.patreon_pledges.iter().find(|x| x.active && x.user_id == user_id.value && x.campaign_id == *campaign_id && x.tiers.contains(tier_id)) {
+					if let Some(connection) = HAKUMI_MODELS.user(user_id).await?.server_connections(guild_id).await.unwrap().into_iter().find(|x| x.id == pledge.connection_id) {
+						if !used_connections.contains(connection) {
+							used_connections.push(connection.clone());
 						}
-						true
-					} else { false }
+					}
+					true
 				} else { false }
-			},
+			} else { false },
 			CriteriaItem::RobloxGroupMembership { .. } |
 			CriteriaItem::RobloxGroupMembershipRole { .. } |
-			CriteriaItem::RobloxGroupMembershipRoleRankInRange { .. } =>
-				if let Some(connection) = if let Some(user) = user {
-					user.server_connections(guild_id).await.unwrap().into_iter().find(|x| matches!(x.kind, ConnectionKind::Roblox))
-				} else { None } {
+			CriteriaItem::RobloxGroupMembershipRoleRankInRange { .. } => if let Some(user_id) = user_id {
+				let user = HAKUMI_MODELS
+					.user(user_id)
+					.await?;
+				if let Some(connection) = user
+					.server_connections(guild_id)
+					.await?
+					.into_iter()
+					.find(|x| matches!(x.kind, ConnectionKind::Roblox))
+				{
 					if !used_connections.contains(connection) {
 						used_connections.push(connection.clone());
 					}
@@ -393,13 +436,14 @@ pub async fn member_meets_action_criteria(
 						},
 						_ => false
 					}
-				} else { false },
+				} else { false }
+			} else { false },
 			CriteriaItem::MellowServerSyncingActions { action_ids, quantifier } => {
 				let mut total_met = 0;
 				let minimum_amount = quantifier.minimum();
 				for action_id in action_ids {
 					if let Some(other_action) = all_actions.iter().find(|x| &x.id == action_id) {
-						if member_meets_action_criteria(user, other_action, guild_id, all_actions, connection_metadata, criteria_cache, used_connections).await {
+						if member_meets_action_criteria(guild_id, user_id, other_action, all_actions, connection_metadata, criteria_cache, used_connections).await? {
 							total_met += 1;
 							if minimum_amount == Some(total_met) {
 								break;
@@ -415,11 +459,11 @@ pub async fn member_meets_action_criteria(
 
 			total_met += 1;
 			if minimum_amount == Some(total_met) {
-				return true;
+				return Ok(true);
 			}
 		} else {
 			criteria_cache.insert(cache_key, false);
 		}
 	}
-	minimum_amount.is_none() && total_met == criteria.items.len()
+	Ok(minimum_amount.is_none() && total_met == criteria.items.len())
 }

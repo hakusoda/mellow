@@ -1,24 +1,19 @@
 use tokio::time;
 use mellow_macros::command;
 use twilight_model::{
-	id::{ marker::{ UserMarker, GuildMarker }, Id },
+	id::{ marker::{ GuildMarker, UserMarker }, Id },
 	application::interaction::InteractionData
 };
 
 use crate::{
 	model::{
-		discord::{
-			guild::CachedMember,
-			DISCORD_MODELS
-		},
+		discord::DISCORD_MODELS,
 		hakumi::{
-			user::{ connection::ConnectionKind, User },
+			id::{ marker::UserMarker as HakuUserMarker, HakuId },
+			user::connection::ConnectionKind,
 			HAKUMI_MODELS
 		},
-		mellow::{
-			server::Server,
-			MELLOW_MODELS
-		}
+		mellow::MELLOW_MODELS
 	},
 	server::logging::{ ServerLog, ProfileSyncKind },
 	discord::INTERACTION,
@@ -31,9 +26,9 @@ use crate::{
 	cast
 };
 
-#[tracing::instrument(skip(user, member, server))]
-pub async fn sync_with_token(server: &Server, user: &User, member: &CachedMember, interaction_token: &String, is_onboarding: bool, forced_by: Option<Id<UserMarker>>) -> Result<SyncMemberResult> {
-	let result = sync_single_user(server, user, member, None).await?;
+#[tracing::instrument]
+pub async fn sync_with_token(guild_id: Id<GuildMarker>, user_id: HakuId<HakuUserMarker>, member_id: Id<UserMarker>, interaction_token: &String, is_onboarding: bool, forced_by: Option<Id<UserMarker>>) -> Result<SyncMemberResult> {
+	let result = sync_single_user(guild_id, user_id, member_id, None).await?;
 	let mut has_assigned_role = false;
 	let mut has_retracted_role = false;
 	for item in result.role_changes.iter() {
@@ -46,7 +41,9 @@ pub async fn sync_with_token(server: &Server, user: &User, member: &CachedMember
 		}
 	}
 
-	let user2 = DISCORD_MODELS.user(member.user_id).await?;
+	let user2 = DISCORD_MODELS
+		.user(member_id)
+		.await?;
 	let is_forced = forced_by.is_some();
 	let (pronoun, determiner, contraction) = if is_forced { ("They", "Their", "they're") } else { ("You", "Your", "you're") };
 	INTERACTION.update_response(interaction_token)
@@ -72,15 +69,15 @@ pub async fn sync_with_token(server: &Server, user: &User, member: &CachedMember
 			if is_forced {
 				format!("\n***by the way...** {} hasn't yet connected all platforms this server utilises.*\n", user2.display_name())
 			} else {
-				format!("\n### You're missing connections\nYou haven't given this server access to all connections yet, change that [here](https://hakumi.cafe/mellow/server/{}/user_settings)!\n", server.id)
+				format!("\n### You're missing connections\nYou haven't given this server access to all connections yet, change that [here](https://hakumi.cafe/mellow/server/{}/user_settings)!\n", guild_id)
 			}
-		} else { "".into() }, server.id)))
+		} else { "".into() }, guild_id)))
 		.await?;
 
 	let mut server_logs: Vec<ServerLog> = vec![];
 	if is_onboarding {
 		server_logs.push(ServerLog::UserCompletedOnboarding {
-			user_id: member.user_id
+			user_id: member_id
 		});
 	}
 
@@ -91,7 +88,7 @@ pub async fn sync_with_token(server: &Server, user: &User, member: &CachedMember
 				MemberStatus::Banned => ProfileSyncKind::Banned,
 				MemberStatus::Kicked => ProfileSyncKind::Kicked
 			},
-			user_id: member.user_id,
+			user_id: member_id,
 			forced_by,
 			role_changes: result.role_changes.clone(),
 			nickname_change: result.nickname_change.clone(),
@@ -112,17 +109,19 @@ pub async fn sync_with_token(server: &Server, user: &User, member: &CachedMember
 #[command(slash, no_dm, description = "Sync your server profile. (may contain traces of burgers)")]
 pub async fn sync(_context: Context, interaction: Interaction) -> Result<CommandResponse> {
 	let member = interaction.member().await?.unwrap();
-	let user_id = member.user_id;
 	let guild_id = interaction.guild_id.unwrap();
-	if let Some(user) = HAKUMI_MODELS.user_by_discord(guild_id, user_id).await? {
-		return Ok(CommandResponse::defer(interaction.token.clone(), Box::pin(async move {
-			let server = MELLOW_MODELS.server(guild_id).await?;
-			sync_with_token(server.value(), user.value(), member.value(), &interaction.token, false, None).await?;
-			Ok(())
-		})));
+	let member_id = member.user_id;
+	if let Some(user_id) = HAKUMI_MODELS.user_by_discord(guild_id, member_id).await? {
+		return Ok(CommandResponse::defer(
+			interaction.token.clone(),
+			Box::pin(async move {
+				sync_with_token(guild_id, *user_id, member_id, &interaction.token, false, None).await?;
+				Ok(())
+			})
+		));
 	}
 
-	create_sign_up(guild_id, user_id, interaction.token).await;
+	create_sign_up(guild_id, member_id, interaction.token).await;
 	
 	let guild = DISCORD_MODELS.guild(guild_id).await?;
 	Ok(CommandResponse::ephemeral(
@@ -147,17 +146,16 @@ pub async fn forcesync(_context: Context, interaction: Interaction) -> Result<Co
 	}
 
 	let resolved = cast!(interaction.data.unwrap(), InteractionData::ApplicationCommand).unwrap().resolved.unwrap();
-	let user_id = resolved.members.into_iter().next().unwrap().0;
-	let member = DISCORD_MODELS.member(guild_id, user_id).await?;
-	if let Some(user) = HAKUMI_MODELS.user_by_discord(guild_id, user_id).await? {
+	let member_id = resolved.members.into_iter().next().unwrap().0;
+	if let Some(user_id) = HAKUMI_MODELS.user_by_discord(guild_id, member_id).await? {
 		return Ok(CommandResponse::defer(interaction.token.clone(), Box::pin(async move {
-			sync_with_token(server.value(), user.value(), member.value(), &interaction.token, false, Some(interaction.user_id.unwrap())).await?;
+			sync_with_token(guild_id, *user_id, member_id, &interaction.token, false, Some(interaction.user_id.unwrap())).await?;
 			Ok(())
 		})));
 	}
 	
 	Ok(CommandResponse::ephemeral(
-		format!("## <:niko_look_left:1227198516590411826>  Cannot sync member\n<@{user_id}> has not yet been set up with mellow... ┐(￣ヘ￣)┌")
+		format!("## <:niko_look_left:1227198516590411826>  Cannot sync member\n<@{member_id}> has not yet been set up with mellow... ┐(￣ヘ￣)┌")
 	))
 }
 
@@ -182,7 +180,7 @@ pub async fn forcesyncall(context: Context, interaction: Interaction) -> Result<
 			)
 			.collect();
 		let members = context.members(guild_id, user_ids).await?;
-		let metadata = get_connection_metadata(&users.iter().collect(), server.value()).await?;
+		let metadata = get_connection_metadata(guild_id, &users.iter().map(|x| x.id).collect()).await?;
 
 		let mut logs: Vec<ServerLog> = vec![];
 		let mut total_synced = 0;
@@ -190,7 +188,7 @@ pub async fn forcesyncall(context: Context, interaction: Interaction) -> Result<
 		for member in members {
 			let string_id = member.user_id.to_string();
 
-			let result = sync_member(users.iter().find(|x| x.has_connection(&string_id, ConnectionKind::Discord)), member.value(), server.value(), &metadata).await?;
+			let result = sync_member(guild_id, users.iter().find(|x| x.has_connection(&string_id, ConnectionKind::Discord)).map(|x| x.id), member.user_id, &metadata).await?;
 			if result.profile_changed {
 				// sleep for one second to avoid hitting Discord ratelimit
 				time::sleep(time::Duration::from_secs(1)).await;

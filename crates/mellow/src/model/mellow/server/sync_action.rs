@@ -12,7 +12,7 @@ use crate::model::hakumi::{
 	user::connection::ConnectionKind
 };
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct SyncAction {
 	pub id: HakuId<SyncActionMarker>,
 	#[serde(flatten)]
@@ -21,7 +21,7 @@ pub struct SyncAction {
 	pub display_name: String
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "kind", content = "action_data")]
 pub enum SyncActionKind {
 	#[serde(rename = "discord.member.assign_roles")]
@@ -39,20 +39,20 @@ pub enum SyncActionKind {
 	ControlFlowCancel(Reasoning)
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct Reasoning {
 	#[serde(default)]
 	pub reason: Option<String>/*,
 	pub user_facing_details: Option<String>*/
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct Criteria {
 	pub items: Vec<CriteriaItem>,
 	pub quantifier: Quantifier
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Quantifier {
 	All,
@@ -70,7 +70,7 @@ impl Quantifier {
 	}
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "kind")]
 pub enum CriteriaItem {
 	#[serde(rename = "hakumi.user.connection")]

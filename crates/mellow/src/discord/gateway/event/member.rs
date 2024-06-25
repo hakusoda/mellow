@@ -34,6 +34,7 @@ pub async fn member_add(member_add: MemberAdd) -> Result<()> {
 				("member", Variable::from_member(new_member.value(), guild_id).await?)
 			], None);
 			document
+				.clone()
 				.process(variables)
 				.await?
 				.send_logs(guild_id)
@@ -87,6 +88,7 @@ pub async fn member_update(member_update: MemberUpdate) -> Result<()> {
 						("member", (&member_update).into())
 					], None);
 					document
+						.clone()
 						.process(variables)
 						.await?
 						.send_logs(guild_id)
@@ -106,6 +108,7 @@ pub async fn member_update(member_update: MemberUpdate) -> Result<()> {
 				("new_member", (&member_update).into())
 			], None);
 			document
+				.clone()
 				.process(variables)
 				.await?
 				.send_logs(guild_id)
