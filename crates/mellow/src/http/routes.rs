@@ -88,16 +88,16 @@ async fn sync_member(request: HttpRequest, body: web::Json<SyncMemberPayload>, p
 		let member_id: Id<UserMarker> = Id::new(member_id);
 		if let Some(user_id) = HAKUMI_MODELS.user_by_discord(guild_id, member_id).await? {
 			return Ok(web::Json(if let Some(token) = &body.webhook_token {
-				sync_with_token(guild_id, *user_id, member_id, token, false, None).await?
+				sync_with_token(guild_id, user_id, member_id, token, false, None).await?
 			} else if body.is_sign_up.is_some_and(|x| x) {
 				let result = if let Some(item) = SIGN_UPS.read().await.iter().find(|x| x.user_id == member_id && x.guild_id == guild_id) {
-					Some(sync_with_token(guild_id, *user_id, member_id, &item.interaction_token, true, None).await?)
+					Some(sync_with_token(guild_id, user_id, member_id, &item.interaction_token, true, None).await?)
 				} else { None };
 				SIGN_UPS.write().await.retain(|x| x.user_id != member_id);
 
 				return result.map(web::Json).ok_or(ApiError::SignUpNotFound);
 			} else {
-				sync_single_user(guild_id, *user_id, member_id, None).await?
+				sync_single_user(guild_id, user_id, member_id, None).await?
 			}));
 		}
 		Err(ApiError::UserNotFound)
@@ -280,10 +280,10 @@ async fn patreon_webhook(payload: web::Payload) -> ApiResult<HttpResponse> {
 		.map_err(|_| ApiError::GenericInvalidRequest)?;
 	if let Some(user_id) = HAKUMI_MODELS.user_by_discord(guild_id, Id::new(user_id.parse().map_err(|_| ApiError::GenericInvalidRequest)?)).await? {
 		let user = HAKUMI_MODELS
-			.user(*user_id)
+			.user(user_id)
 			.await?;
 		let discord_id = Id::new(user.connections.iter().find(|x| matches!(x.kind, ConnectionKind::Discord)).unwrap().id.to_string().parse().map_err(|_| ApiError::GenericInvalidRequest)?);
-		sync_single_user(guild_id, *user_id, discord_id, Some(ConnectionMetadata {
+		sync_single_user(guild_id, user_id, discord_id, Some(ConnectionMetadata {
 			patreon_pledges: vec![PatreonPledge {
 				tiers: payload.data.relationships.currently_entitled_tiers.data.iter().map(|x| x.id.clone()).collect(),
 				active: payload.data.attributes.patron_status.map_or(false, |x| x == "active_patron"),

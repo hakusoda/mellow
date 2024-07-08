@@ -118,8 +118,8 @@ impl Document {
 						if let Some(member) = Some(variables.read().await.get("member")) {
 							let user_id = member.get("id").cast_id();
 							let guild_id = member.get("guild_id").cast_id();
-							if let Some(haku_id) = HAKUMI_MODELS.users_by_discord.get(&(guild_id, user_id)) {
-								let result = sync_single_user(guild_id, *haku_id, user_id, None)
+							if let Some(haku_id) = HAKUMI_MODELS.user_by_discord(guild_id, user_id) .await? {
+								let result = sync_single_user(guild_id, haku_id, user_id, None)
 									.await?;
 								if result.profile_changed || result.member_status.removed() {
 									MELLOW_MODELS
@@ -182,7 +182,12 @@ impl Document {
 					ElementKind::GetLinkedPatreonCampaign => {
 						let guild_id = variables.read().await.get("guild_id").cast_id();
 						let server = MELLOW_MODELS.server(guild_id).await?;
-						variables.write().await.set("campaign", crate::patreon::get_campaign(server.oauth_authorisations.first().unwrap()).await?.into());
+						variables
+							.write()
+							.await
+							.set("campaign", crate::patreon::get_campaign(
+								server.oauth_authorisations.first().unwrap().clone()
+							).await?.into());
 					},
 					ElementKind::InteractionReply(data) => {
 						let variables = &*variables.read().await;

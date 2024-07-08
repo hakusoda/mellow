@@ -28,7 +28,7 @@ pub static HAKUMI_MODELS: Lazy<HakumiModels> = Lazy::new(HakumiModels::default);
 pub struct HakumiModels {
 	pub users: DashMap<HakuId<HakuUserMarker>, User>,
 	//user_connections: DashMap<(HakuId<HakuUserMarker>, HakuId<ConnectionMarker>), Connection>,
-	pub users_by_discord: DashMap<(Id<GuildMarker>, Id<UserMarker>), HakuId<HakuUserMarker>>,
+	users_by_discord: DashMap<(Id<GuildMarker>, Id<UserMarker>), HakuId<HakuUserMarker>>,
 
 	pub vs_documents: DashMap<HakuId<DocumentMarker>, Document>
 }
@@ -57,11 +57,11 @@ impl HakumiModels {
 		})
 	}
 
-	pub async fn user_by_discord(&self, guild_id: Id<GuildMarker>, user_id: Id<UserMarker>) -> Result<Option<Ref<'_, (Id<GuildMarker>, Id<UserMarker>), HakuId<HakuUserMarker>>>> {
+	pub async fn user_by_discord(&self, guild_id: Id<GuildMarker>, user_id: Id<UserMarker>) -> Result<Option<HakuId<HakuUserMarker>>> {
 		let key = (guild_id, user_id);
 		Ok(if let Some(item) = self.users_by_discord.get(&key) {
 			tracing::info!("users_by_discord.read (guild_id={guild_id}) (discord_id={user_id})");
-			Some(item)
+			Some(*item)
 		} else {
 			let mut new_item = match get_user_reference(user_id).await? {
 				Some(x) => x,
@@ -74,11 +74,8 @@ impl HakumiModels {
 			tracing::info!("users_by_discord.write (guild_id={guild_id}) (discord_id={user_id}) (user_id={user_id})");
 
 			self.users.insert(user_id, new_item);
-			Some(self.users_by_discord
-				.entry(key)
-				.insert(user_id)
-				.downgrade()
-			)
+			self.users_by_discord.insert(key, user_id);
+			Some(user_id)
 		})
 	}
 

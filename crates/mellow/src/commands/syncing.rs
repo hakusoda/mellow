@@ -115,7 +115,7 @@ pub async fn sync(_context: Context, interaction: Interaction) -> Result<Command
 		return Ok(CommandResponse::defer(
 			interaction.token.clone(),
 			Box::pin(async move {
-				sync_with_token(guild_id, *user_id, member_id, &interaction.token, false, None).await?;
+				sync_with_token(guild_id, user_id, member_id, &interaction.token, false, None).await?;
 				Ok(())
 			})
 		));
@@ -149,7 +149,7 @@ pub async fn forcesync(_context: Context, interaction: Interaction) -> Result<Co
 	let member_id = resolved.members.into_iter().next().unwrap().0;
 	if let Some(user_id) = HAKUMI_MODELS.user_by_discord(guild_id, member_id).await? {
 		return Ok(CommandResponse::defer(interaction.token.clone(), Box::pin(async move {
-			sync_with_token(guild_id, *user_id, member_id, &interaction.token, false, Some(interaction.user_id.unwrap())).await?;
+			sync_with_token(guild_id, user_id, member_id, &interaction.token, false, Some(interaction.user_id.unwrap())).await?;
 			Ok(())
 		})));
 	}

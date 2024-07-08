@@ -26,10 +26,10 @@ pub async fn setup(_context: Context, interaction: Interaction) -> Result<Comman
 				.insert(json!({
 					"id": guild_id,
 					"name": guild.name,
-					"creator_id": *user_id,
+					"creator_id": user_id,
 					"avatar_url": guild.icon.map(|x| format!("https://cdn.discordapp.com/icons/{guild_id}/{x}.webp")),
 					"banner_url": guild.splash.map(|x| format!("https://cdn.discordapp.com/splashes/{guild_id}/{x}.webp?size=1032")),
-					"owner_user_id": *user_id
+					"owner_user_id": user_id
 				}))?
 				.await?;
 

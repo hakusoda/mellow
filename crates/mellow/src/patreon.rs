@@ -116,7 +116,7 @@ struct IncludedItemAttributes {
 	patron_count: u64
 }
 
-pub async fn get_campaign(oauth_authorisation: &OAuthAuthorisation) -> Result<Campaign2> {
+pub async fn get_campaign(oauth_authorisation: OAuthAuthorisation) -> Result<Campaign2> {
 	let access_token = &oauth_authorisation.access_token;
 	Ok(match CACHES.patreon_campaigns.get(access_token)
 		.instrument(info_span!("cache.patreon_campaigns.read", ?access_token))
