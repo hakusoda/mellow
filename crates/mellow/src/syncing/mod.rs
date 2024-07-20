@@ -17,10 +17,15 @@ use mellow_util::{
 		marker::{ ConnectionMarker, DocumentMarker, SyncActionMarker, UserMarker as HakuUserMarker },
 		HakuId
 	},
-	DISCORD_CLIENT
+	DISCORD_CLIENT,
+	PG_POOL
 };
+use rand::{ distributions::Alphanumeric, Rng };
 use serde::{ Serialize, Deserialize };
-use std::collections::HashMap;
+use std::{
+	collections::HashMap,
+	pin::Pin
+};
 use twilight_http::request::AuditLogReason;
 use twilight_model::id::{
 	marker::{ GuildMarker, RoleMarker, UserMarker },
@@ -87,21 +92,41 @@ pub enum SyncingIssue {
 }
 
 impl SyncingIssue {
-	pub async fn format_many(items: &[Self], guild_id: Id<GuildMarker>, website_token: &str) -> Result<String> {
+	pub async fn format_many(items: &[Self], guild_id: Id<GuildMarker>, user_id: HakuId<HakuUserMarker>, website_token: &str) -> Result<String> {
 		let mut strings = Vec::with_capacity(items.len());
 		for item in items {
-			strings.push(item.display(guild_id, website_token).await?);
+			strings.push(item.display(guild_id, user_id, website_token).await?);
 		}
 
 		Ok(strings.join("\n"))
 	}
 
-	pub async fn display(&self, guild_id: Id<GuildMarker>, website_token: &str) -> Result<String> {
+	pub async fn display(&self, guild_id: Id<GuildMarker>, user_id: HakuId<HakuUserMarker>, website_token: &str) -> Result<String> {
 		Ok(match self {
 			Self::MissingConnections =>
 				format!("You haven't given this server access to all connections yet, fix that [here](<https://hakumi.cafe/mellow/server/{guild_id}/user_settings?mt={website_token}>)!"),
-			Self::MissingOAuthAuthorisation(connection_kind) =>
-				format!("Missing authorisation for your {connection_kind:?} connection.")
+			Self::MissingOAuthAuthorisation(connection_kind) => {
+				let token: String = rand::thread_rng()
+					.sample_iter(Alphanumeric)
+					.take(24)
+					.map(char::from)
+					.collect();
+				sqlx::query!(
+					"
+					INSERT INTO mellow_connection_requests (server_id, user_id, token)
+					VALUES ($1, $2, $3)
+					ON CONFLICT (user_id)
+					DO UPDATE SET token = $3
+					",
+					guild_id.get() as i64,
+					user_id.value,
+					&token
+				)
+					.execute(&*Pin::static_ref(&PG_POOL).await)
+					.await?;
+
+				format!("Your {connection_kind:?} connection was invalidated, please [reconnect it](<https://www.patreon.com/oauth2/authorize?client_id=BaKp_8PIeBxx0cfJoEEaVxVQMxD3c_IUFS_qCSu5gNFnXLL5c4Qw4YMPtgMJG-n9&redirect_uri=https%3A%2F%2Flocal-api-new.hakumi.cafe%2Fv1%2Fconnection_callback%2F4&scope=identity%20identity.memberships&response_type=code&state=m1-{token}>).")
+			}
 		})
 	}
 }
@@ -212,7 +237,7 @@ pub async fn get_connection_metadata(guild_id: Id<GuildMarker>, user_ids: &Vec<H
 										}
 									}
 								}
-							} else {
+							} else if !issues.iter().any(|x| matches!(x, SyncingIssue::MissingOAuthAuthorisation(ConnectionKind::Patreon))) {
 								issues.push(SyncingIssue::MissingOAuthAuthorisation(ConnectionKind::Patreon));
 							}
 						}

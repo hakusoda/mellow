@@ -14,7 +14,7 @@ use twilight_model::id::{
 use crate::{
 	server::logging::send_logs,
 	syncing::{ SyncingInitiator, sync_single_user },
-	Result
+	Error, Result
 };
 
 pub mod action_tracker;
@@ -131,19 +131,11 @@ pub async fn process_document(document: DocumentModel, variables: Variable) -> A
 				},
 				ElementKind::GetLinkedPatreonCampaign => {
 					let guild_id = variables.read().await.get("guild_id").cast_id();
-					let oauth_authorisations = CACHE
-						.mellow
-						.server_oauth_authorisations(guild_id)
-						.await?;
-					let patreon_authorisation = CACHE
-						.mellow
-						.oauth_authorisation(oauth_authorisations.into_iter().next().unwrap())
-						.unwrap()
-						.clone();
 					let campaign = CACHE
 						.patreon
-						.campaign(patreon_authorisation)
+						.campaign(guild_id)
 						.await?
+						.ok_or(Error::PatreonCampaignNotConnected)?
 						.clone();
 					variables
 						.write()

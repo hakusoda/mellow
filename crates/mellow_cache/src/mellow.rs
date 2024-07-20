@@ -31,7 +31,7 @@ use crate::{ CACHE, Result };
 #[derive(Default)]
 pub struct MellowCache {
 	commands: DashMap<Id<CommandMarker>, CommandModel>,
-	oauth_authorisations: DashMap<u64, OAuthAuthorisationModel>,
+	pub oauth_authorisations: DashMap<u64, OAuthAuthorisationModel>,
 	pub servers: DashMap<Id<GuildMarker>, ServerModel>,
 	server_oauth_authorisations: DashMap<Id<GuildMarker>, DashSet<u64>>,
 	server_sync_actions: DashMap<Id<GuildMarker>, DashSet<HakuId<SyncActionMarker>>>,

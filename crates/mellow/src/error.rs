@@ -8,6 +8,9 @@ pub enum Error {
 
 	#[error("Model: {0}")]
 	Model(#[from] mellow_models::Error),
+
+	#[error("There is no patreon campaign connected")]
+	PatreonCampaignNotConnected,
 	
 	#[error("Reqwest Error: {0}")]
 	Reqwest(#[from] reqwest::Error),

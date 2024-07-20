@@ -58,32 +58,48 @@ pub async fn sync_with_token(guild_id: Id<GuildMarker>, user_id: HakuId<HakuUser
 	};
 	let website_token = create_website_token(user_id)
 		.await?;
-	DISCORD_INTERACTION_CLIENT
-		.update_response(interaction_token)
-		.content(Some(&format!("{}{}\n[<:gear_fill:1224667889592700950>  Your Server Preferences <:external_link:1225472071417729065>](<https://hakumi.cafe/mellow/server/{}/user_settings?mt={website_token}>)   •  [<:personraisedhand:1219234152709095424> Get Support](<https://discord.com/invite/rs3r4dQu9P>)", if result.profile_changed {
-			format!("## <:check2circle:1219235152580837419>  {determiner} server profile has been updated.\n{}```diff\n{}```",
-				if has_assigned_role && has_retracted_role {
-					format!("{pronoun} been assigned and retracted roles, ...equality! o(>ω<)o")
-				} else if has_assigned_role {
-					format!("{pronoun} been assigned new roles, {}",
-						if is_forced { "yippee!" } else { "hold them dearly to your heart! ♡(>ᴗ•)" }
+	let content = format!("{}\n[<:gear_fill:1224667889592700950>  Your Server Preferences <:external_link:1225472071417729065>](<https://hakumi.cafe/mellow/server/{guild_id}/user_settings?mt={website_token}>)   •  [<:personraisedhand:1219234152709095424> Get Support](<https://discord.com/invite/rs3r4dQu9P>)",
+		if result.profile_changed {
+			format!("## {}\n```diff\n{}```",
+				if result.issues.is_empty() {
+					format!("<:check2circle:1219235152580837419>  {determiner} server profile has been updated.\n{}",
+						if has_assigned_role && has_retracted_role {
+							format!("{pronoun} been assigned and retracted roles, ...equality! o(>ω<)o")
+						} else if has_assigned_role {
+							format!("{pronoun} been assigned new roles, {}",
+								if is_forced { "yippee!" } else { "hold them dearly to your heart! ♡(>ᴗ•)" }
+							)
+						} else {
+							format!("{pronoun} been retracted some roles, that's either a good thing, or a bad thing! ┐(︶▽︶)┌")
+						}
 					)
 				} else {
-					format!("{pronoun} been retracted some roles, that's either a good thing, or a bad thing! ┐(︶▽︶)┌")
+					format!("There was an issue while syncing your profile.\n{}",
+						SyncingIssue::format_many(&result.issues, guild_id, user_id, &website_token)
+							.await?
+					)
 				},
-				result.role_changes.iter().map(|x| match x.kind {
-					RoleChangeKind::Added => format!("+ {}", x.display_name),
-					RoleChangeKind::Removed => format!("- {}", x.display_name)
-				}).collect::<Vec<String>>().join("\n")
+				result.role_changes
+					.iter()
+					.map(|x| match x.kind {
+						RoleChangeKind::Added => format!("+ {}", x.display_name),
+						RoleChangeKind::Removed => format!("- {}", x.display_name)
+					})
+					.collect::<Vec<String>>()
+					.join("\n")
+			)
+		} else if !result.issues.is_empty() {
+			format!("## There was an issue while syncing your profile.\n{}\n",
+				SyncingIssue::format_many(&result.issues, guild_id, user_id, &website_token)
+					.await?
 			)
 		} else {
 			format!("## <:mellow_squircled:1225413361777508393>  {determiner} server profile is already up to par!\nAccording to my simulated brain, there's nothing to change here, {contraction} all set!\nIf you were expecting a *different* result, you may need to try again in a few minutes, apologies!\n")
-		}, if !result.issues.is_empty() {
-			format!("\n### There were issues with your syncing request\n{}\n",
-				SyncingIssue::format_many(&result.issues, guild_id, &website_token)
-					.await?
-			)
-		} else { "".into() }, guild_id)))
+		}
+	);
+	DISCORD_INTERACTION_CLIENT
+		.update_response(interaction_token)
+		.content(Some(&content))
 		.await?;
 
 	let mut server_logs: Vec<ServerLog> = vec![];

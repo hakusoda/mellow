@@ -17,6 +17,7 @@ chrono = { version = "0.4.38", features = ["serde"] }
 dashmap = { version = "6.0.1", features = ["inline"] }
 sqlx = { version = "0.7.4", features = ["uuid", "json", "chrono", "macros", "postgres", "tls-native-tls", "rust_decimal", "runtime-tokio"] }
 tokio = { version = "1.38.0", features = ["full"] }
+rand = "0.8.5"
 reqwest = { version = "0.12.5", features = ["json"] }
 serde = { version = "1.0.203", features = ["derive"] }
 serde_json = "1.0.120"
