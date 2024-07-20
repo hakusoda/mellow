@@ -1,25 +1,29 @@
-use tokio::time;
+use dashmap::DashMap;
+use mellow_cache::CACHE;
 use mellow_macros::command;
+use mellow_models::{
+	hakumi::user::connection::ConnectionKind,
+	mellow::ServerModel
+};
+use mellow_util::{
+	hakuid::{
+		marker::UserMarker as HakuUserMarker,
+		HakuId
+	},
+	create_website_token,
+	DISCORD_INTERACTION_CLIENT
+};
+use tokio::time;
 use twilight_model::{
 	id::{ marker::{ GuildMarker, UserMarker }, Id },
 	application::interaction::InteractionData
 };
 
 use crate::{
-	model::{
-		discord::DISCORD_MODELS,
-		hakumi::{
-			id::{ marker::UserMarker as HakuUserMarker, HakuId },
-			user::connection::ConnectionKind,
-			HAKUMI_MODELS
-		},
-		mellow::MELLOW_MODELS
-	},
-	server::logging::{ ServerLog, ProfileSyncKind },
-	discord::INTERACTION,
+	server::logging::{ ServerLog, send_logs },
 	syncing::{
 		sign_ups::create_sign_up,
-		MemberStatus, RoleChangeKind, SyncMemberResult,
+		RoleChangeKind, SyncingInitiator, SyncingIssue, SyncMemberResult,
 		sync_member, get_connection_metadata, sync_single_user
 	},
 	Result, Context, Interaction, CommandResponse,
@@ -28,7 +32,11 @@ use crate::{
 
 #[tracing::instrument]
 pub async fn sync_with_token(guild_id: Id<GuildMarker>, user_id: HakuId<HakuUserMarker>, member_id: Id<UserMarker>, interaction_token: &String, is_onboarding: bool, forced_by: Option<Id<UserMarker>>) -> Result<SyncMemberResult> {
-	let result = sync_single_user(guild_id, user_id, member_id, None).await?;
+	let initiator = match forced_by {
+		Some(x) => SyncingInitiator::ForcedBy(x),
+		None => SyncingInitiator::Manual
+	};
+	let result = sync_single_user(guild_id, user_id, member_id, initiator, None).await?;
 	let mut has_assigned_role = false;
 	let mut has_retracted_role = false;
 	for item in result.role_changes.iter() {
@@ -40,23 +48,28 @@ pub async fn sync_with_token(guild_id: Id<GuildMarker>, user_id: HakuId<HakuUser
 			break;
 		}
 	}
-
-	let user2 = DISCORD_MODELS
-		.user(member_id)
-		.await?;
+	
+	// we need localisation, my gosh 😭
 	let is_forced = forced_by.is_some();
-	let (pronoun, determiner, contraction) = if is_forced { ("They", "Their", "they're") } else { ("You", "Your", "you're") };
-	INTERACTION.update_response(interaction_token)
-		.content(Some(&format!("{}{}\n[<:gear_fill:1224667889592700950>  Your Server Preferences <:external_link:1225472071417729065>](https://hakumi.cafe/mellow/server/{}/user_settings)   •  [<:personraisedhand:1219234152709095424> Get Support](https://discord.com/invite/rs3r4dQu9P)", if result.profile_changed {
+	let (pronoun, determiner, contraction) = if is_forced {
+		(format!("<@{member_id}> has"), "Their", "they're")
+	} else {
+		("You have".into(), "Your", "you're")
+	};
+	let website_token = create_website_token(user_id)
+		.await?;
+	DISCORD_INTERACTION_CLIENT
+		.update_response(interaction_token)
+		.content(Some(&format!("{}{}\n[<:gear_fill:1224667889592700950>  Your Server Preferences <:external_link:1225472071417729065>](https://hakumi.cafe/mellow/server/{}/user_settings?mt={website_token})   •  [<:personraisedhand:1219234152709095424> Get Support](https://discord.com/invite/rs3r4dQu9P)", if result.profile_changed {
 			format!("## <:check2circle:1219235152580837419>  {determiner} server profile has been updated.\n{}```diff\n{}```",
 				if has_assigned_role && has_retracted_role {
-					format!("{pronoun} have been assigned and retracted roles, ...equality! o(>ω<)o")
+					format!("{pronoun} been assigned and retracted roles, ...equality! o(>ω<)o")
 				} else if has_assigned_role {
-					format!("{pronoun} have been assigned new roles, {}",
+					format!("{pronoun} been assigned new roles, {}",
 						if is_forced { "yippee!" } else { "hold them dearly to your heart! ♡(>ᴗ•)" }
 					)
 				} else {
-					format!("Some of {} roles were retracted, that's either a good thing, or a bad thing! ┐(︶▽︶)┌", determiner.to_lowercase())
+					format!("{pronoun} been retracted some roles, that's either a good thing, or a bad thing! ┐(︶▽︶)┌")
 				},
 				result.role_changes.iter().map(|x| match x.kind {
 					RoleChangeKind::Added => format!("+ {}", x.display_name),
@@ -65,12 +78,11 @@ pub async fn sync_with_token(guild_id: Id<GuildMarker>, user_id: HakuId<HakuUser
 			)
 		} else {
 			format!("## <:mellow_squircled:1225413361777508393>  {determiner} server profile is already up to par!\nAccording to my simulated brain, there's nothing to change here, {contraction} all set!\nIf you were expecting a *different* result, you may need to try again in a few minutes, apologies!\n")
-		}, if result.is_missing_connections {
-			if is_forced {
-				format!("\n***by the way...** {} hasn't yet connected all platforms this server utilises.*\n", user2.display_name())
-			} else {
-				format!("\n### You're missing connections\nYou haven't given this server access to all connections yet, change that [here](https://hakumi.cafe/mellow/server/{}/user_settings)!\n", guild_id)
-			}
+		}, if !result.issues.is_empty() {
+			format!("\n### There were issues with your syncing request\n{}\n",
+				SyncingIssue::format_many(&result.issues, guild_id, &website_token)
+					.await?
+			)
 		} else { "".into() }, guild_id)))
 		.await?;
 
@@ -81,24 +93,11 @@ pub async fn sync_with_token(guild_id: Id<GuildMarker>, user_id: HakuId<HakuUser
 		});
 	}
 
-	if result.profile_changed || result.member_status.removed() {
-		server_logs.push(ServerLog::ServerProfileSync {
-			kind: match result.member_status {
-				MemberStatus::Ok => ProfileSyncKind::Default,
-				MemberStatus::Banned => ProfileSyncKind::Banned,
-				MemberStatus::Kicked => ProfileSyncKind::Kicked
-			},
-			user_id: member_id,
-			forced_by,
-			role_changes: result.role_changes.clone(),
-			nickname_change: result.nickname_change.clone(),
-			relevant_connections: result.relevant_connections.clone()
-		});
+	if let Some(result_log) = result.create_log() {
+		server_logs.push(result_log);
 	}
 
-	MELLOW_MODELS.server(result.server_id)
-		.await?
-		.send_logs(server_logs)
+	send_logs(guild_id, server_logs)
 		.await?;
 
 	Ok(result)
@@ -111,7 +110,7 @@ pub async fn sync(_context: Context, interaction: Interaction) -> Result<Command
 	let member = interaction.member().await?.unwrap();
 	let guild_id = interaction.guild_id.unwrap();
 	let member_id = member.user_id;
-	if let Some(user_id) = HAKUMI_MODELS.user_by_discord(guild_id, member_id).await? {
+	if let Some(user_id) = CACHE.hakumi.user_by_discord(guild_id, member_id).await? {
 		return Ok(CommandResponse::defer(
 			interaction.token.clone(),
 			Box::pin(async move {
@@ -123,9 +122,17 @@ pub async fn sync(_context: Context, interaction: Interaction) -> Result<Command
 
 	create_sign_up(guild_id, member_id, interaction.token).await;
 	
-	let guild = DISCORD_MODELS.guild(guild_id).await?;
+	let guild = CACHE.discord
+		.guild(guild_id)
+		.await?;
 	Ok(CommandResponse::ephemeral(
-		format!("# <:waving_hand:1225409285203431565> <:mellow_squircled:1225413361777508393>  mellow says konnichiwa (hello)!\nWelcome to *{}*, before you can start syncing here, you need to get set up with mellow!\nWhenever you're ready, tap [here](<https://discord.com/api/oauth2/authorize?client_id=1068554282481229885&redirect_uri=https%3A%2F%2Fapi.hakumi.cafe%2Fv0%2Fauth%2Fcallback%2Fmellow&response_type=code&scope=identify&state=sync.{}>) to proceed, it won't take long!\n\n*fancy knowing what mellow is? read up on it [here](<https://hakumi.cafe/docs/mellow>)!*", guild.name, guild_id)
+		format!("# <:waving_hand:1225409285203431565> <:mellow_squircled:1225413361777508393>  mellow says konnichiwa (hello)!\nWelcome to *{}*, before you can start syncing here, you need to get set up with mellow!\nWhenever you're ready, tap [here](<https://discord.com/api/oauth2/authorize?client_id=1068554282481229885&redirect_uri=https%3A%2F%2Fapi-new.hakumi.cafe%2Fv1%2Fconnection_callback%2F0&response_type=code&scope=identify&state=mellow_new.{}>) to proceed, it won't take long!\n\n*fancy knowing what mellow is? read up on it [here](<https://hakumi.cafe/docs/mellow>)!*", guild.name, guild_id)
+	))
+}
+
+fn server_not_found() -> Result<CommandResponse> {
+	Ok(CommandResponse::ephemeral(
+		"## <:niko_look_left:1227198516590411826>  Cannot sync member\nThis server hasn't been set up with mellow yet, if you're an administrator, execute the /setup command."
 	))
 }
 
@@ -140,14 +147,16 @@ fn forceful_disabled_response(guild_id: Id<GuildMarker>) -> Result<CommandRespon
 pub async fn forcesync(_context: Context, interaction: Interaction) -> Result<CommandResponse> {
 	// can we get so much higher (height)
 	let guild_id = interaction.guild_id.unwrap();
-	let server = MELLOW_MODELS.server(guild_id).await?;
+	let Some(server) = CACHE.mellow.server(guild_id) else {
+		return server_not_found();
+	};
 	if !server.allow_forced_syncing {
 		return forceful_disabled_response(guild_id);
 	}
 
 	let resolved = cast!(interaction.data.unwrap(), InteractionData::ApplicationCommand).unwrap().resolved.unwrap();
 	let member_id = resolved.members.into_iter().next().unwrap().0;
-	if let Some(user_id) = HAKUMI_MODELS.user_by_discord(guild_id, member_id).await? {
+	if let Some(user_id) = CACHE.hakumi.user_by_discord(guild_id, member_id).await? {
 		return Ok(CommandResponse::defer(interaction.token.clone(), Box::pin(async move {
 			sync_with_token(guild_id, user_id, member_id, &interaction.token, false, Some(interaction.user_id.unwrap())).await?;
 			Ok(())
@@ -163,55 +172,72 @@ pub async fn forcesync(_context: Context, interaction: Interaction) -> Result<Co
 #[command(slash, no_dm, description = "Forcefully sync every member in this server.", default_member_permissions = "0")]
 pub async fn forcesyncall(context: Context, interaction: Interaction) -> Result<CommandResponse> {
 	let guild_id = interaction.guild_id.unwrap();
-	let server = MELLOW_MODELS.server(guild_id).await?;
+	let Some(server) = CACHE.mellow.server(guild_id) else {
+		return server_not_found();
+	};
 	if !server.allow_forced_syncing {
 		return forceful_disabled_response(guild_id);
 	}
 
 	Ok(CommandResponse::defer(interaction.token.clone(), Box::pin(async move {
-		let users = server.users(guild_id).await?;
-		let user_ids = users
+		let user_ids = ServerModel::users(guild_id)
+			.await?;
+		let user_connection_ids = CACHE
+			.hakumi
+			.user_connections(&user_ids)
+			.await?;
+		let user_connections = CACHE
+			.hakumi
+			.connections(&user_connection_ids)
+			.await?;
+		let discord_user_ids = user_connections
 			.iter()
-			.flat_map(|x| x.connections
-				.iter()
-				.filter_map(|x| if x.kind == ConnectionKind::Discord {
-					Some(Id::new(x.sub.parse().unwrap()))
-				} else { None })
-			)
+			.filter_map(|x| if x.kind == ConnectionKind::Discord {
+				Some(Id::new(x.sub.parse().unwrap()))
+			} else { None })
 			.collect();
-		let members = context.members(guild_id, user_ids).await?;
-		let metadata = get_connection_metadata(guild_id, &users.iter().map(|x| x.id).collect()).await?;
+		let mapped_user_ids: DashMap<Id<UserMarker>, HakuId<HakuUserMarker>> = DashMap::with_capacity(user_ids.len());
+		for connection in user_connections {
+			if connection.is_discord() {
+				mapped_user_ids.insert(Id::new(connection.sub.parse().unwrap()), connection.user_id);
+			}
+		}
+
+		let metadata = get_connection_metadata(guild_id, &user_ids)
+			.await?;
+		let members: Vec<_> = context
+			.members(guild_id, discord_user_ids)
+			.await?
+			.into_iter()
+			.map(|x| x.user_id)
+			.collect();
 
 		let mut logs: Vec<ServerLog> = vec![];
 		let mut total_synced = 0;
 		let mut total_changed = 0;
-		for member in members {
-			let string_id = member.user_id.to_string();
+		for user_id in members {
+			let result = sync_member(guild_id, mapped_user_ids.remove(&user_id).map(|x| x.1), user_id, SyncingInitiator::ForcedBy(interaction.user_id.unwrap()), &metadata)
+				.await?;
+			if let Some(result_log) = result.create_log() {
+				logs.push(result_log);
+			}
 
-			let result = sync_member(guild_id, users.iter().find(|x| x.has_connection(&string_id, ConnectionKind::Discord)).map(|x| x.id), member.user_id, &metadata).await?;
 			if result.profile_changed {
 				// sleep for one second to avoid hitting Discord ratelimit
 				time::sleep(time::Duration::from_secs(1)).await;
 				total_changed += 1;
-
-				logs.push(ServerLog::ServerProfileSync {
-					kind: ProfileSyncKind::Default,
-					user_id: member.user_id,
-					forced_by: interaction.user_id,
-					role_changes: result.role_changes,
-					nickname_change: result.nickname_change,
-					relevant_connections: result.relevant_connections
-				});
 			}
 
 			total_synced += 1
 		}
 
-		INTERACTION.update_response(&interaction.token)
+		DISCORD_INTERACTION_CLIENT
+			.update_response(&interaction.token)
 			.content(Some(&format!("## Successfully synced {total_synced} profiles\n{total_changed} profile(s) in total were updated.")))
 			.await?;
 
-		server.send_logs(logs).await?;
+		send_logs(guild_id, logs)
+			.await?;
 		Ok(())
 	})))
 }

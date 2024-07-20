@@ -1,3 +1,8 @@
+use mellow_models::hakumi::DocumentModel;
+use mellow_util::hakuid::{
+	marker::UserMarker,
+	HakuId
+};
 use serde::{ Serialize, Deserialize };
 use serde_json::Value;
 use twilight_model::id::{
@@ -5,10 +10,7 @@ use twilight_model::id::{
 	Id
 };
 
-use crate::{
-	visual_scripting::Document,
-	Result
-};
+use crate::Result;
 
 fn v_str(value: &Value) -> String {
 	match value {
@@ -27,18 +29,18 @@ pub struct IdentifiedObject {
 pub struct ActionLog {
 	#[serde(rename = "type")]
 	pub kind: String,
-	pub author: Option<ActionLogAuthor>,
+	pub author: Option<HakuId<UserMarker>>,
 	pub server_id: Id<GuildMarker>,
 	pub data_changes: Vec<DataChange>,
 	pub target_command: Option<IdentifiedObject>,
 	pub target_webhook: Option<IdentifiedObject>,
 	#[serde(skip_serializing)]
-	pub target_document: Option<Document>,
+	pub target_document: Option<DocumentModel>,
 	pub target_sync_action: Option<IdentifiedObject>,
 }
 
 impl ActionLog {
-	pub fn action_string(&self, guild_id: &Id<GuildMarker>) -> String {
+	pub fn action_string(&self, guild_id: Id<GuildMarker>) -> String {
 		match self.kind.as_str() {
 			"mellow.server.api_key.created" => "created a new API Key".into(),
 			"mellow.server.command.created" => format!("created  {}", self.format_command(guild_id)),
@@ -84,7 +86,7 @@ impl ActionLog {
 		details
 	}
 
-	fn format_command(&self, guild_id: &Id<GuildMarker>) -> String {
+	fn format_command(&self, guild_id: Id<GuildMarker>) -> String {
 		if let Some(command) = &self.target_command {
 			format!("<:Command:1226104451065053254> [{}](https://hakumi.cafe/mellow/server/{}/commands/{})", command.name, guild_id, command.id)
 		} else {
@@ -100,7 +102,7 @@ impl ActionLog {
 		}
 	}
 
-	fn format_sync_action(&self, guild_id: &Id<GuildMarker>) -> String {
+	fn format_sync_action(&self, guild_id: Id<GuildMarker>) -> String {
 		if let Some(action) = &self.target_sync_action {
 			format!("<:sync_action:1220987025608413195> [{}](https://hakumi.cafe/mellow/server/{}/syncing/actions/{})", action.name, guild_id, action.id)
 		} else {
@@ -108,7 +110,7 @@ impl ActionLog {
 		}
 	}
 	
-	fn format_webhook(&self, guild_id: &Id<GuildMarker>) -> String {
+	fn format_webhook(&self, guild_id: Id<GuildMarker>) -> String {
 		if let Some(webhook) = &self.target_webhook {
 			format!("<:webhook:1220992010975051796> [{}](https://hakumi.cafe/mellow/server/{}/settings/webhooks/{})", webhook.name, guild_id, webhook.id)
 		} else {
@@ -120,20 +122,6 @@ impl ActionLog {
 		self.data_changes.iter()
 			.find(|x| x.name == "name" || x.name == "display_name")
 			.and_then(|x| x.value().as_str())
-	}
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ActionLogAuthor {
-	pub id: String,
-	pub name: Option<String>,
-	pub username: String,
-	pub avatar_url: Option<String>
-}
-
-impl ActionLogAuthor {
-	pub fn display_name(&self) -> String {
-		self.name.as_ref().map_or_else(|| self.username.clone(), |x| x.clone())
 	}
 }
 

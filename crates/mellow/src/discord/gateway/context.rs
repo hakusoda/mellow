@@ -1,24 +1,20 @@
+use dashmap::{ mapref::multiple::RefMulti, DashMap };
+use mellow_cache::CACHE;
+use mellow_models::discord::guild::MemberModel;
 use tokio::sync::{
 	Mutex,
 	oneshot
 };
-use dashmap::{ mapref::multiple::RefMulti, DashMap };
 use twilight_model::{
 	id::{
-		marker::{ UserMarker, GuildMarker },
+		marker::{ GuildMarker, UserMarker },
 		Id
 	},
 	gateway::payload::outgoing::RequestGuildMembers
 };
 use twilight_gateway::MessageSender;
 
-use crate::{
-	model::discord::{
-		guild::CachedMember,
-		DISCORD_MODELS
-	},
-	Result
-};
+use crate::Result;
 
 pub struct Context {
 	message_sender: MessageSender,
@@ -35,10 +31,10 @@ impl Context {
 		}
 	}
 
-	pub async fn members(&self, guild_id: Id<GuildMarker>, user_ids: Vec<Id<UserMarker>>) -> Result<Vec<RefMulti<'_, (Id<GuildMarker>, Id<UserMarker>), CachedMember>>> {
+	pub async fn members(&self, guild_id: Id<GuildMarker>, user_ids: Vec<Id<UserMarker>>) -> Result<Vec<RefMulti<'_, (Id<GuildMarker>, Id<UserMarker>), MemberModel>>> {
 		let user_ids2: Vec<Id<UserMarker>> = user_ids
 			.iter()
-			.filter(|user_id| !DISCORD_MODELS.members.contains_key(&(guild_id, **user_id)))
+			.filter(|user_id| !CACHE.discord.members.contains_key(&(guild_id, **user_id)))
 			.copied()
 			.collect();
 
@@ -56,7 +52,9 @@ impl Context {
 
 			rx.await?;
 		}
-		Ok(DISCORD_MODELS.members
+		Ok(CACHE
+			.discord
+			.members
 			.iter()
 			.filter(|x| x.key().0 == guild_id && user_ids.contains(&x.user_id))
 			.collect()

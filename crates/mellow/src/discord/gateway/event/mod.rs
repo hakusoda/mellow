@@ -2,11 +2,12 @@ use twilight_gateway::Event;
 
 use crate::{ Result, Context };
 
-pub mod role;
 pub mod guild;
+pub mod interaction;
 pub mod member;
 pub mod message;
-pub mod interaction;
+pub mod misc;
+pub mod role;
 
 pub fn handle_event(context: &Context, event: Event) {
 	let event_kind = event.kind();
@@ -22,6 +23,7 @@ pub fn handle_event(context: &Context, event: Event) {
 		Event::MemberUpdate(x) => spawn(member::member_update(*x)),
 		Event::MemberRemove(x) => spawn(member::member_remove(x)),
 		Event::MessageCreate(x) => spawn(message::message_create(*x)),
+		Event::Ready(x) => spawn(misc::ready(*x)),
 		Event::RoleCreate(x) => role::role_create(x),
 		Event::RoleUpdate(x) => role::role_update(x),
 		Event::RoleDelete(x) => role::role_delete(x),

@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tSELECT id, logging_types, default_nickname, logging_channel_id, allow_forced_syncing\n\t\t\tFROM mellow_servers\n\t\t\tWHERE id = ANY($1)\n\t\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "logging_types",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "default_nickname",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "logging_channel_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "allow_forced_syncing",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8Array"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "f5ac675109ccde1febd1cc6b7948e3bdcd6d65c270f12ce0eabf254af3975fac"
+}

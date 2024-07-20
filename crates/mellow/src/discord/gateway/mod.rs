@@ -14,7 +14,7 @@ pub async fn initialise() {
 	tracing::info!("initialising discord gateway");
 
 	let config = ConfigBuilder::new(
-		env!("DISCORD_TOKEN").to_string(),
+		env!("DISCORD_BOT_TOKEN").to_string(),
 			Intents::GUILDS | Intents::GUILD_MEMBERS | Intents::GUILD_MESSAGES |
 			Intents::MESSAGE_CONTENT
 	)

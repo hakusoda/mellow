@@ -13,38 +13,36 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-hex = "0.4.3"
-url = "2.5.2"
-hmac = "0.12.1"
-sha2 = "0.10.8"
-uuid = { version = "1.9.1", features = ["serde"] }
-moka = { version = "0.12.7", features = ["future"] }
-sqlx = { version = "0.7.4", features = ["uuid", "json", "chrono", "macros", "postgres", "tls-native-tls", "rust_decimal", "runtime-tokio"] }
-tokio = { version = "1.38.0", features = ["full"] }
-serde = { version = "1.0.203", features = ["derive"] }
-chrono = { version = "0.4.38", features = ["serde"] }
-tracing = "0.1.40"
-futures = "0.3.30"
-dashmap = { version = "6.0.1", features = ["inline"] }
-reqwest = { version = "0.12.5", features = ["json"] }
 actix-web = "4.8.0"
-once_cell = "1.19.0"
-thiserror = "1.0.61"
-simd-json = "0.13.10"
-postgrest = { git = "https://github.com/hakusoda/postgrest-rs.git", tag = "v0.1.1", features = ["simd-json"] }
-url-escape = "0.1.1"
-tokio-util = "0.7.11"
-serde_repr = "0.1.19"
-serde_json = "1.0.118"
-tracing-log = "0.2.0"
-derive_more = "0.99.18"
-parking_lot = { version = "0.12.3", features = ["deadlock_detection"] }
-futures-util = "0.3.30"
-mellow_macros = { path = "../mellow_macros" }
-twilight-http = { git = "https://github.com/twilight-rs/twilight.git", rev = "6a44028", features = ["simd-json"] }
-twilight-util = { git = "https://github.com/twilight-rs/twilight.git", rev = "6a44028", features = ["builder"] }
-twilight-model = { git = "https://github.com/twilight-rs/twilight.git", rev = "6a44028" }
 async-recursion = "1.1.1"
-twilight-gateway = { git = "https://github.com/twilight-rs/twilight.git", rev = "6a44028", features = ["simd-json"] }
-twilight-validate = "0.15.3"
+chrono.workspace = true
+dashmap.workspace = true
+derive_more = "0.99.18"
+futures.workspace = true
+hex = "0.4.3"
+hmac = "0.12.1"
+mellow_cache.path = "../mellow_cache"
+mellow_macros.path = "../mellow_macros"
+mellow_models.path = "../mellow_models"
+mellow_util.path = "../mellow_util"
+once_cell = "1.19.0"
+reqwest.workspace = true
+sha2 = "0.10.8"
+serde.workspace = true
+serde_json = "1.0.118"
+serde_repr.workspace = true
+simd-json.workspace = true
+sqlx.workspace = true
+thiserror = "1.0.61"
+tokio.workspace = true
+tokio-util = "0.7.11"
+tracing = "0.1.40"
+tracing-log = "0.2.0"
 tracing-subscriber = "0.3.18"
+twilight-gateway.workspace = true
+twilight-http.workspace = true
+twilight-model.workspace = true
+twilight-util.workspace = true
+twilight-validate = "0.15.3"
+url = "2.5.2"
+uuid = { version = "1.9.1", features = ["serde"] }

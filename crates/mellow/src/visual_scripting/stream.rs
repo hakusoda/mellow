@@ -1,8 +1,7 @@
+use futures::Stream;
+use mellow_models::hakumi::visual_scripting::{ Condition, Element, ElementKind, StatementBlock, StatementConditionKind, Variable };
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use futures::Stream;
-
-use super::{ Element, Variable, Condition, ElementKind, StatementBlock, StatementConditionKind };
 
 pub struct ElementStream {
 	// would something else be better-suited for this?

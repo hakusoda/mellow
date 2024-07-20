@@ -1,3 +1,4 @@
+use mellow_models::hakumi::visual_scripting::ElementKind;
 use twilight_model::id::{
 	marker::{ GuildMarker, ChannelMarker, MessageMarker },
 	Id
@@ -5,32 +6,32 @@ use twilight_model::id::{
 
 use crate::{
 	error::Error,
-	model::mellow::MELLOW_MODELS,
-	server::logging::ServerLog,
-	visual_scripting::ElementKind,
+	server::logging::{ ServerLog, send_logs },
 	Result
 };
 
 pub struct ActionTracker {
+	document_name: String,
 	items: Vec<ActionTrackerItem>,
-	document_name: String
+	pub replied: bool
 }
 
 impl ActionTracker {
 	pub fn new(document_name: String) -> Self {
 		Self {
-			items: vec![],
-			document_name
+			document_name,
+			items: Vec::new(),
+			replied: false
 		}
 	}
 
 	pub async fn send_logs(self, guild_id: Id<GuildMarker>) -> Result<()> {
 		if !self.items.is_empty() {
-			let server = MELLOW_MODELS.server(guild_id).await?;
-			server.send_logs(vec![ServerLog::VisualScriptingDocumentResult {
+			send_logs(guild_id, vec![ServerLog::VisualScriptingDocumentResult {
 				items: self.items,
 				document_name: self.document_name
-			}]).await?;
+			}])
+				.await?;
 		}
 		Ok(())
 	}

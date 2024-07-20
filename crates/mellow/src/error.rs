@@ -1,13 +1,19 @@
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+	#[error("Cache: {0}")]
+	Cache(#[from] mellow_cache::Error),
+
+	#[error("Fetch: {0} {1}")]
+	Fetch(String, String),
+
+	#[error("Model: {0}")]
+	Model(#[from] mellow_models::Error),
+	
 	#[error("Reqwest Error: {0}")]
 	Reqwest(#[from] reqwest::Error),
 
 	#[error("Url Parse Error: {0}")]
 	UrlParse(#[from] url::ParseError),
-
-	#[error("Fetch Error: {0} {1}")]
-	Fetch(String, String),
 
 	#[error("Discord Error: {0}")]
 	TwilightHttp(#[from] twilight_http::Error),
@@ -32,15 +38,17 @@ pub enum Error {
 	#[error("Mac Error: {0}")]
 	Mac(#[from] hmac::digest::MacError),
 
+	#[error("Server not found")]
+	ServerNotFound,
+
 	#[error("Serde JSON Error: {0}")]
 	SerdeJson(#[from] serde_json::Error),
 	#[error("SIMD JSON Error: {0}")]
 	SimdJson(#[from] simd_json::Error),
+	#[error("SQLx: {0}")]
+	Sqlx(#[from] sqlx::Error),
 	#[error("System Time Error: {0}")]
 	SystemTime(#[from] std::time::SystemTimeError),
-
-	#[error("SQLx Error: {0}")]
-	Sqlx(#[from] sqlx::Error),
 
 	#[error("Integer Parsing Error: {0}")]
 	ParseInteger(#[from] std::num::ParseIntError),
@@ -49,10 +57,7 @@ pub enum Error {
 	FromHex(#[from] hex::FromHexError),
 
 	#[error("Sha2 Invalid Length Error: {0}")]
-	Sha2InvalidLength(#[from] sha2::digest::InvalidLength),
-
-	#[error("PostgREST Error: {0}")]
-	Postgrest(#[from] postgrest::Error)
+	Sha2InvalidLength(#[from] sha2::digest::InvalidLength)
 }
 
 pub type Result<T> = core::result::Result<T, Error>;

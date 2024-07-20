@@ -1,6 +1,12 @@
-use serde::{ Serialize, Deserialize };
 use chrono::{ Utc, DateTime };
 use dashmap::mapref::one::Ref;
+use mellow_cache::CACHE;
+use mellow_models::{
+	discord::guild::MemberModel,
+	hakumi::visual_scripting::Variable
+};
+use mellow_util::DISCORD_INTERACTION_CLIENT;
+use serde::{ Serialize, Deserialize };
 use serde_repr::*;
 use twilight_model::{
 	id::{
@@ -14,14 +20,8 @@ use twilight_model::{
 };
 
 use crate::{
-	model::discord::{
-		guild::CachedMember,
-		DISCORD_MODELS
-	},
-	discord::INTERACTION,
 	commands::COMMANDS,
-	database::ServerCommand,
-	visual_scripting::Variable,
+	visual_scripting::{ process_document, variable_from_member },
 	Result, Context, CommandResponse
 };
 
@@ -48,9 +48,13 @@ impl Interaction {
 		} else { None })
 	}*/
 
-	pub async fn member(&self) -> Result<Option<Ref<'static, (Id<GuildMarker>, Id<UserMarker>), CachedMember>>> {
+	pub async fn member(&self) -> Result<Option<Ref<'static, (Id<GuildMarker>, Id<UserMarker>), MemberModel>>> {
 		Ok(if let Some(user_id) = self.user_id && let Some(guild_id) = self.guild_id {
-			Some(DISCORD_MODELS.member(guild_id, user_id).await?)
+			Some(CACHE
+				.discord
+				.member(guild_id, user_id)
+				.await?
+			)
 		} else { None })
 	}
 }
@@ -97,33 +101,43 @@ pub struct EmbedFooter {
 async fn parse_interaction(context: Context, interaction: Interaction) -> Result<InteractionResponse> {
 	match interaction.data.as_ref().unwrap() {
 		InteractionData::ApplicationCommand(data) => {
-			if let Some(guild_id) = data.guild_id && let Some(member) = interaction.member().await? {
-				let command = match ServerCommand::fetch(guild_id, data.name.clone()).await {
-					Ok(x) => x,
-					Err(x) => {
-						tracing::error!("error while fetching server command (guild_id={}) (name={}) {}", guild_id, data.name, x);
-						return Ok(InteractionResponse {
-							kind: InteractionResponseType::ChannelMessageWithSource,
-							data: Some(InteractionResponseData {
-								flags: Some(MessageFlags::EPHEMERAL),
-								content: Some(format!("<:niko_yawn:1226170445242568755> an unexpected error occurred while fetching the information for this command... oopsie daisy!\n```sh\n{x}```")),
-								..Default::default()
-							})
+			if let Some(guild_id) = data.guild_id && let Some(user_id) = interaction.user_id {
+				/*let Some(command) = CACHE.mellow.command(data.id) else {
+					return Ok(InteractionResponse {
+						kind: InteractionResponseType::ChannelMessageWithSource,
+						data: Some(InteractionResponseData {
+							flags: Some(MessageFlags::EPHEMERAL),
+							content: Some("<:niko_yawn:1226170445242568755> uhm... this custom command doesn't appear to exist anymore!`".into()),
+							..Default::default()
 						})
-					}
-				};
-				if command.document.is_ready_for_stream() {
+					});
+				};*/
+				let command = CACHE
+					.mellow
+					.command(data.id)
+					.await?;
+				let document = CACHE
+					.hakumi
+					.visual_scripting_document(command.document_id)
+					.await?;
+				if let Some(document) = document.clone_if_ready() {
 					let token = interaction.token.clone();
 					tokio::spawn(async move {
 						let variables = Variable::create_map([
-							("member", Variable::from_member(member.value(), guild_id).await.unwrap()),
+							("member", variable_from_member(guild_id, user_id).await?),
 							("guild_id", guild_id.into()),
-							("interaction_token", token.into())
+							("interaction_token", token.clone().into())
 						], None);
-						command.document
-							.clone()
-							.process(variables)
-							.await?
+						let action_tracker = process_document(document, variables)
+							.await;
+						if !action_tracker.replied {
+							DISCORD_INTERACTION_CLIENT
+								.update_response(&token)
+								.content(Some("oh dear, something went wrong while processing this custom command!"))
+								.await?;
+						}
+						
+						action_tracker
 							.send_logs(guild_id)
 							.await?;
 						Ok::<(), crate::error::Error>(())
@@ -177,6 +191,7 @@ async fn parse_interaction(context: Context, interaction: Interaction) -> Result
 				Ok(InteractionResponse {
 					kind: InteractionResponseType::ChannelMessageWithSource,
 					data: Some(InteractionResponseData {
+						flags: Some(MessageFlags::EPHEMERAL),
 						content: Some("<:niko_look_left:1227198516590411826> erm... this command hasn't been implemented yet...".into()),
 						..Default::default()
 					})
@@ -192,7 +207,10 @@ pub async fn handle_interaction(context: Context, interaction: TwilightInteracti
 	let id = interaction.id;
 	let token = interaction.token.clone();
 	if let Some(user) = interaction.author() {
-		DISCORD_MODELS.users.insert(user.id, user.clone().into());
+		CACHE
+			.discord
+			.users
+			.insert(user.id, user.clone().into());
 	}
 
 	let interaction = Interaction {
@@ -213,8 +231,11 @@ pub async fn handle_interaction(context: Context, interaction: TwilightInteracti
 		}
 	};
 
-	let response = parse_interaction(context, interaction).await?;
-	INTERACTION.create_response(id, &token, &response).await?;
+	let response = parse_interaction(context, interaction)
+		.await?;
+	DISCORD_INTERACTION_CLIENT
+		.create_response(id, &token, &response)
+		.await?;
 
 	Ok(())
 }

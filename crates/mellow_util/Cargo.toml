@@ -1,0 +1,26 @@
+cargo-features = ["edition2024"]
+
+[package]
+name = "mellow_util"
+description = "mellow"
+
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+async-once-cell.workspace = true
+chrono.workspace = true
+http = "1.1.0"
+once_cell.workspace = true
+rand = "0.8.5"
+reqwest.workspace = true
+serde.workspace = true
+sqlx.workspace = true
+twilight-http.workspace = true
+twilight-model.workspace = true
+uuid = "1.9.1"

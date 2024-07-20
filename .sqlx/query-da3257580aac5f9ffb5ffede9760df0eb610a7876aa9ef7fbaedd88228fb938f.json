@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tSELECT user_connections\n\t\t\tFROM mellow_user_server_settings\n\t\t\tWHERE server_id = $1 AND user_id = $2\n\t\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_connections",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "da3257580aac5f9ffb5ffede9760df0eb610a7876aa9ef7fbaedd88228fb938f"
+}

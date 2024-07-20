@@ -2,9 +2,7 @@ cargo-features = ["edition2024"]
 
 [package]
 name = "mellow_cache"
-description = "i am the one that caches, capeesh?"
-
-# this package is currently empty & unused, i'd like to base it on what's going on here: https://github.com/TeamHarTex/HarTex/tree/nightly/discord-frontend
+description = "mellow"
 
 authors.workspace = true
 edition.workspace = true
@@ -13,3 +11,17 @@ version.workspace = true
 homepage.workspace = true
 repository.workspace = true
 rust-version.workspace = true
+
+[dependencies]
+chrono.workspace = true
+dashmap.workspace = true
+mellow_models.path = "../mellow_models"
+mellow_util.path = "../mellow_util"
+once_cell.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+simd-json.workspace = true
+sqlx.workspace = true
+thiserror.workspace = true
+twilight-model.workspace = true

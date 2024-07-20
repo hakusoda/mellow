@@ -1,12 +1,16 @@
 #![feature(let_chains, try_blocks, duration_constructors)]
+use mellow_cache::CACHE;
+use mellow_models::hakumi::visual_scripting::{ DocumentKind, Variable };
+use mellow_util::DISCORD_INTERACTION_CLIENT;
 use std::{
 	sync::Arc,
 	time::{ Duration, SystemTime }
 };
 use tokio::sync::RwLock;
-use tracing::{ Level, info };
 use tokio_util::sync::CancellationToken;
+use tracing::{ Level, info };
 use tracing_log::LogTracer;
+use tracing_subscriber::FmtSubscriber;
 use twilight_model::{
 	id::{
 		marker::{ UserMarker, GuildMarker },
@@ -15,32 +19,20 @@ use twilight_model::{
 	guild::Permissions,
 	channel::message::MessageFlags
 };
-use tracing_subscriber::FmtSubscriber;
 
 use error::Error;
-use model::{
-	discord::DISCORD_MODELS,
-	mellow::MELLOW_MODELS
-};
-use discord::INTERACTION;
 use interaction::Interaction;
-use visual_scripting::{ Variable, DocumentKind };
+use visual_scripting::{ process_document, variable_from_member };
 
-mod http;
-mod util;
-mod cache;
+mod commands;
+mod discord;
 mod error;
-mod fetch;
-mod model;
-mod state;
+mod http;
+mod interaction;
+mod util;
 mod roblox;
 mod server;
-mod discord;
 mod syncing;
-mod patreon;
-mod commands;
-mod database;
-mod interaction;
 mod visual_scripting;
 
 pub type Context = Arc<discord::gateway::Context>;
@@ -88,7 +80,8 @@ impl CommandResponse {
 					Error::TwilightHttp(error) => (" while communicating with discord...", error.to_string()),
 					_ => (", not sure what exactly though!", error.to_string())
 				};
-				INTERACTION.update_response(&interaction_token)
+				DISCORD_INTERACTION_CLIENT
+					.update_response(&interaction_token)
 					.content(Some(&format!("<:niko_look_left:1227198516590411826> something unexpected happened{text}\n```diff\n- {problem}```")))
 					.await
 					.unwrap();
@@ -108,34 +101,15 @@ impl CommandResponse {
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> std::io::Result<()> {
 	let subscriber = FmtSubscriber::builder()
-        .with_max_level(Level::INFO)
-        .finish();
+		.with_max_level(Level::INFO)
+		.finish();
 
-    tracing::subscriber::set_global_default(subscriber)
-        .expect("setting default subscriber failed");
+	tracing::subscriber::set_global_default(subscriber)
+		.expect("setting default subscriber failed");
 
 	LogTracer::init().unwrap();
 
-	std::thread::spawn(move || loop {
-        std::thread::sleep(std::time::Duration::from_secs(2));
-        for deadlock in parking_lot::deadlock::check_deadlock() {
-            for deadlock in deadlock {
-                println!(
-                    "Found a deadlock! {}:\n{:?}",
-                    deadlock.thread_id(),
-                    deadlock.backtrace()
-                );
-            }
-        }
-    });
-
 	info!("starting mellow v{}", env!("CARGO_PKG_VERSION"));
-
-	state::STATE.set(state::State {
-		pg_pool: sqlx::PgPool::connect(env!("DATABASE_URL"))
-			.await
-			.unwrap()
-	}).unwrap();
 
 	let job_cancel = CancellationToken::new();
 	tokio::spawn(spawn_onboarding_job(job_cancel.clone()));
@@ -161,16 +135,13 @@ async fn spawn_onboarding_job(stop_signal: CancellationToken) {
 					info!("removing {entry:?} from PENDING_VERIFICATION_TIMER");
 					let (guild_id, user_id, _) = *entry;
 					tokio::spawn(async move {
-						if let Some(document) = MELLOW_MODELS.event_document(guild_id, DocumentKind::MemberCompletedOnboardingEvent).await.unwrap() {
-							if document.is_ready_for_stream(){
-								let member = DISCORD_MODELS.member(guild_id, user_id).await.unwrap();
+						if let Some(document) = CACHE.mellow.event_document(guild_id, DocumentKind::MemberCompletedOnboardingEvent).await.unwrap() {
+							if let Some(document) = document.clone_if_ready() {
 								let variables = Variable::create_map([
-									("member", Variable::from_member(member.value(), guild_id).await.unwrap())
+									("member", variable_from_member(guild_id, user_id).await.unwrap())
 								], None);
-								document
-									.clone()
-									.process(variables)
-									.await.unwrap()
+								process_document(document, variables)
+									.await
 									.send_logs(guild_id)
 									.await.unwrap();
 							}

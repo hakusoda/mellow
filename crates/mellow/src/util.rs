@@ -1,5 +1,26 @@
-use serde::{ Deserialize, Deserializer };
+use dashmap::mapref::multiple::RefMulti;
+use mellow_cache::CACHE;
+use mellow_models::hakumi::user::ConnectionModel;
+use mellow_util::hakuid::{
+	marker::{ ConnectionMarker, UserMarker },
+	HakuId
+};
+use twilight_model::id::{
+	marker::GuildMarker,
+	Id
+};
 
-pub fn deserialise_nullable_vec<'de, D: Deserializer<'de>, T: Deserialize<'de>>(deserialiser: D) -> Result<Vec<T>, D::Error> {
-	Ok(Vec::deserialize(deserialiser).unwrap_or(vec![]))
+use crate::Result;
+
+pub async fn user_server_connections(guild_id: Id<GuildMarker>, user_id: HakuId<UserMarker>) -> Result<Vec<RefMulti<'static, HakuId<ConnectionMarker>, ConnectionModel>>> {
+	let user_connections = CACHE
+		.mellow
+		.user_settings(guild_id, user_id)
+		.await?
+		.user_connections();
+	Ok(CACHE
+		.hakumi
+		.connections(&user_connections)
+		.await?
+	)
 }
