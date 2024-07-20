@@ -60,7 +60,7 @@ pub async fn sync_with_token(guild_id: Id<GuildMarker>, user_id: HakuId<HakuUser
 		.await?;
 	DISCORD_INTERACTION_CLIENT
 		.update_response(interaction_token)
-		.content(Some(&format!("{}{}\n[<:gear_fill:1224667889592700950>  Your Server Preferences <:external_link:1225472071417729065>](https://hakumi.cafe/mellow/server/{}/user_settings?mt={website_token})   •  [<:personraisedhand:1219234152709095424> Get Support](https://discord.com/invite/rs3r4dQu9P)", if result.profile_changed {
+		.content(Some(&format!("{}{}\n[<:gear_fill:1224667889592700950>  Your Server Preferences <:external_link:1225472071417729065>](<https://hakumi.cafe/mellow/server/{}/user_settings?mt={website_token}>)   •  [<:personraisedhand:1219234152709095424> Get Support](<https://discord.com/invite/rs3r4dQu9P>)", if result.profile_changed {
 			format!("## <:check2circle:1219235152580837419>  {determiner} server profile has been updated.\n{}```diff\n{}```",
 				if has_assigned_role && has_retracted_role {
 					format!("{pronoun} been assigned and retracted roles, ...equality! o(>ω<)o")
@@ -138,7 +138,7 @@ fn server_not_found() -> Result<CommandResponse> {
 
 fn forceful_disabled_response(guild_id: Id<GuildMarker>) -> Result<CommandResponse> {
 	Ok(CommandResponse::ephemeral(
-		format!("## <:niko_look_left:1227198516590411826>  Cannot sync member\nThis server has forceful syncing disabled, if you're a server manager...you may enable it [here](https://hakumi.cafe/mellow/server/{guild_id}/settings/syncing).")
+		format!("## <:niko_look_left:1227198516590411826>  Cannot sync member\nThis server has forceful syncing disabled, if you're a server manager...you may enable it [here](<https://hakumi.cafe/mellow/server/{guild_id}/settings/syncing>).")
 	))
 }
 

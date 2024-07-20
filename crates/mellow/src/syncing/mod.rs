@@ -99,7 +99,7 @@ impl SyncingIssue {
 	pub async fn display(&self, guild_id: Id<GuildMarker>, website_token: &str) -> Result<String> {
 		Ok(match self {
 			Self::MissingConnections =>
-				format!("You haven't given this server access to all connections yet, fix that [here](https://hakumi.cafe/mellow/server/{guild_id}/user_settings?mt={website_token})!"),
+				format!("You haven't given this server access to all connections yet, fix that [here](<https://hakumi.cafe/mellow/server/{guild_id}/user_settings?mt={website_token}>)!"),
 			Self::MissingOAuthAuthorisation(connection_kind) =>
 				format!("Missing authorisation for your {connection_kind:?} connection.")
 		})
