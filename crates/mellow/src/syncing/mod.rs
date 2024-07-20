@@ -125,7 +125,7 @@ impl SyncingIssue {
 					.execute(&*Pin::static_ref(&PG_POOL).await)
 					.await?;
 
-				format!("Your {connection_kind:?} connection was invalidated, please [reconnect it](<https://www.patreon.com/oauth2/authorize?client_id=BaKp_8PIeBxx0cfJoEEaVxVQMxD3c_IUFS_qCSu5gNFnXLL5c4Qw4YMPtgMJG-n9&redirect_uri=https%3A%2F%2Flocal-api-new.hakumi.cafe%2Fv1%2Fconnection_callback%2F4&scope=identity%20identity.memberships&response_type=code&state=m1-{token}>).")
+				format!("Your {connection_kind:?} connection was invalidated, please [reconnect it](<https://www.patreon.com/oauth2/authorize?client_id=BaKp_8PIeBxx0cfJoEEaVxVQMxD3c_IUFS_qCSu5gNFnXLL5c4Qw4YMPtgMJG-n9&redirect_uri=https%3A%2F%2Fapi-new.hakumi.cafe%2Fv1%2Fconnection_callback%2F4&scope=identity%20identity.memberships&response_type=code&state=m1-{token}>).")
 			}
 		})
 	}
