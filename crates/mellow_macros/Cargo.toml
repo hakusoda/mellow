@@ -16,7 +16,7 @@ rust-version.workspace = true
 proc-macro = true
 
 [dependencies]
-syn = "2.0.66"
+syn = "2.0.71"
 quote = "1.0.36"
 darling = "0.20.9"
 proc-macro2 = "1.0.85"
