@@ -23,4 +23,4 @@ serde.workspace = true
 sqlx.workspace = true
 twilight-http.workspace = true
 twilight-model.workspace = true
-uuid = "1.9.1"
+uuid = "1.10.0"
